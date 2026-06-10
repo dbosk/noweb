@@ -7,14 +7,16 @@ CPIF=| cpif    # change to ">" to insure all sources always made
 
 LIBEXECS=totex disambiguate noidx tohtml elide l2h docs2comments \
 	autodefs.tex autodefs.icon autodefs.yacc autodefs.sml autodefs.pascal \
-	autodefs.promela autodefs.lrtl autodefs.asdl autodefs.mmix xchunks pipedocs
+	autodefs.promela autodefs.lrtl autodefs.asdl autodefs.mmix autodefs.python3 \
+	xchunks pipedocs
 LIBSPECIAL=autodefs.cee
 BINEXECS=noindex sl2h htmltoc
 EXECS=$(LIBEXECS) $(BINEXECS) $(LIBSPECIAL) pdcached
 SRCS=totex.icn disambiguate.icn noidx.icn texdefs.icn icondefs.icn \
 	yaccdefs.icn noindex.icn smldefs.icn tohtml.icn cdefs.icn elide.icn \
 	l2h.icn sl2h.icn pascaldefs.icn promeladefs.icn lrtldefs.icn asdldefs.icn \
-	mmixdefs.icn htmltoc.icn xchunks.icn docs2comments.icn pipedocs.icn pdcached.icn
+	mmixdefs.icn htmltoc.icn xchunks.icn docs2comments.icn pipedocs.icn \
+	pdcached.icn python3defs.icn
 
 .SUFFIXES: .nw .icn .html .tex .dvi
 .nw.icn:
@@ -73,6 +75,8 @@ asdldefs.icn: asdldefs.nw defns.nw
 	notangle -L'#line %-1L "%F"%N' asdldefs.nw defns.nw $(CPIF) $@
 mmixdefs.icn: mmixdefs.nw defns.nw
 	notangle -L'#line %-1L "%F"%N' mmixdefs.nw defns.nw $(CPIF) $@
+python3defs.icn: python3defs.nw defns.nw
+	notangle -L'#line %-1L "%F"%N' python3defs.nw defns.nw $(CPIF) $@
 
 autodefs.tex: texdefs.icn
 	$(ICONT) -o $@ texdefs.icn
@@ -103,6 +107,9 @@ autodefs.asdl: asdldefs.icn
 
 autodefs.mmix: mmixdefs.icn
 	$(ICONT) -o $@ mmixdefs.icn
+
+autodefs.python3: python3defs.icn
+	$(ICONT) -o $@ python3defs.icn
 
 totex: totex.icn
 	$(ICONC) totex.icn
