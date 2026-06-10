@@ -1,0 +1,583 @@
+\section{Highlighting code chunks with minted}
+
+This filter adds syntax highlighting to [[noweave]]'s LaTeX output by
+typesetting code chunks with the \texttt{minted} package instead of
+noweb's plain typewriter rendering.  Each chunk is highlighted
+according to its own language, so a literate program that defines,
+say, both a [[Makefile]] and a Python program gets each chunk
+highlighted with the right lexer.
+
+Typical use, as the \emph{last} filter on the command line:
+\begin{verbatim}
+noweave -autodefs python3 -index -filter tominted fib.nw > fib.tex
+\end{verbatim}
+The woven document must load the \texttt{minted} package, and it must
+be compiled with shell escape enabled, e.g.\
+[[pdflatex -shell-escape fib.tex]], because \texttt{minted} runs
+Pygments at compile time.  This filter targets the LaTeX backend only;
+do not combine it with [[-html]].
+
+\subsection{Overview}
+
+The filter is a Python~3 program that copies the noweb markup stream
+from standard input to standard output, rewriting some code chunks.
+It works in two passes over the (buffered) stream:
+
+\begin{enumerate}
+\item Determine the language of every code chunk.  A chunk whose name
+      looks like a filename (e.g.\ [[fib.py]] or [[Makefile]]) gets
+      the corresponding Pygments lexer; every other chunk inherits the
+      language of the chunks that use it.  We must infer languages
+      ourselves because noweb's markup carries no language
+      information---the chunk names are the only hint there is.
+\item Rewrite each code chunk whose language is known.  The chunk's
+      [[@text]] lines are replaced by [[@literal]] lines that the
+      LaTeX backend copies verbatim, wrapping the code in a
+      [[minted]] environment.  Chunks of unknown language pass
+      through untouched and keep noweb's classic rendering.
+\end{enumerate}
+
+Running last in the pipeline matters: after [[finduses]] and [[noidx]]
+have run, all cross-reference labels exist in the stream, so we can
+render chunk references inside highlighted code as real
+\LA{}\dots\RA{} links with page tags (Section~\ref{sec:uses} below).  Had we
+run earlier, converting [[@text]] to [[@literal]] would have hidden
+the code from [[finduses]] and destroyed the identifier index.
+
+The price of highlighting is that \emph{identifier} occurrences inside
+highlighted code are no longer individually hyperlinked: Pygments owns
+the code body, so noweb's sub-line markup cannot survive inside it.
+The identifier index and the chunk cross-references still work,
+because the [[@index]] and [[@xref]] anchors are not discarded but
+relocated to just after the highlighted block, where they still
+resolve to the same sub-page (Section~\ref{sec:anchors}).
+
+\subsection{Program layout}
+
+<<tominted>>=
+#!/usr/bin/env python3
+"""Noweave filter that typesets code chunks with the minted package.
+
+Reads a noweb markup stream on stdin and writes it to stdout,
+replacing the body of every code chunk of known language with a
+``minted`` environment.  Intended to run as the last filter of
+``noweave``, after ``-index``.  See nowebfilters(7).
+"""
+
+import sys
+
+<<constants>>
+<<functions>>
+
+if __name__ == "__main__":
+    main()
+@
+
+\subsection{Mapping chunk names to lexers}
+
+A root chunk in a tangleable literate program is conventionally named
+after the file it produces, so the chunk name is our language oracle.
+We recognize both bare filenames ([[fib.py]]) and the
+LaTeX-safe quoted convention (the chunk name itself wrapped in noweb's double square
+brackets), which we unwrap before matching.
+
+The tables map either an exact basename or an extension to a Pygments
+lexer name.  They cover the languages noweb ships autodefs filters
+for, plus the common cases; additional mappings can be supplied as
+command-line arguments (Section~\ref{sec:main}).
+
+<<constants>>=
+LEXERS_BY_NAME = {
+    "Makefile": "make",
+    "makefile": "make",
+    "GNUmakefile": "make",
+}
+LEXERS_BY_EXT = {
+    ".py": "python",
+    ".pyw": "python",
+    ".mk": "make",
+    ".c": "c",
+    ".h": "c",
+    ".icn": "icon",
+    ".sh": "bash",
+    ".sml": "sml",
+    ".tex": "latex",
+}
+@
+
+The quoting convention is unwrapped, then the basename is looked up,
+first verbatim and then by extension.  Returning [[None]] means
+``no idea'', which pass~1 may still resolve by inheritance.
+
+<<functions>>=
+def lexer_for_chunk(name):
+    """Return the Pygments lexer for chunk ``name``, or None.
+
+    The chunk name may use noweb's ``[[...]]`` quoting and may
+    contain directory separators; only the basename decides.
+    """
+    if name.startswith("[[") and name.endswith("]]"):
+        name = name[2:-2]
+    basename = name.rsplit("/", 1)[-1]
+    if basename in LEXERS_BY_NAME:
+        return LEXERS_BY_NAME[basename]
+    dot = basename.rfind(".")
+    if dot >= 0:
+        return LEXERS_BY_EXT.get(basename[dot:])
+    return None
+@
+
+\subsection{Reading the markup stream}
+
+Every line of the stream is [[@keyword]] optionally followed by a
+space and an argument.  We keep the raw lines for verbatim passthrough
+and parse them on demand; parsing returns [[None]] for a missing
+argument so that callers can distinguish [[@text]] (no argument at
+all) from [[@text ]] (empty argument).
+
+<<functions>>=
+def parse(line):
+    """Split a markup line into (keyword, argument).
+
+    The argument is None when the line is only ``@keyword``.
+    """
+    space = line.find(" ")
+    if space < 0:
+        return line[1:], None
+    return line[1:space], line[space + 1:]
+@
+
+\subsection{Pass 1: chunk languages}
+\label{sec:langs}
+
+We scan the stream once to learn, for every code chunk, its name
+([[@defn]]) and which chunks it uses ([[@use]]).  Chunks named like
+filenames seed the language map; the languages then propagate along
+the use edges, because a chunk included into a Python file contains
+Python.  A chunk used from chunks of two different languages is
+ambiguous, so we mark it conflicting and leave it unhighlighted
+rather than guess wrong.
+
+<<constants>>=
+CONFLICT = object()
+@
+
+<<functions>>=
+def chunk_languages(lines):
+    """Compute a map from chunk name to Pygments lexer name.
+
+    Languages are seeded from filename-like chunk names and
+    propagated to the chunks they use, transitively.  Chunks with
+    conflicting inherited languages are omitted from the result.
+    """
+    uses = {}
+    langs = {}
+    <<collect definitions and uses>>
+    <<propagate languages along use edges>>
+    return {name: lang for name, lang in langs.items()
+            if lang is not CONFLICT}
+@
+
+A [[@defn]] names the chunk that the following lines (until
+[[@end code]]) belong to, so we track the current chunk while inside
+a code chunk and attribute every [[@use]] to it.
+
+<<collect definitions and uses>>=
+current = None
+in_code = False
+for line in lines:
+    keyword, arg = parse(line)
+    if keyword == "begin" and arg.startswith("code"):
+        in_code = True
+        current = None
+    elif keyword == "end" and arg.startswith("code"):
+        in_code = False
+        current = None
+    elif in_code and keyword == "defn":
+        current = arg
+        uses.setdefault(current, set())
+        lexer = lexer_for_chunk(current)
+        if lexer is not None:
+            langs[current] = lexer
+    elif in_code and keyword == "use" and current is not None:
+        uses[current].add(arg)
+@
+
+The propagation is a straightforward worklist algorithm.  A chunk
+whose own name determines a lexer keeps it: the explicit filename is
+better information than inheritance, and skipping such chunks also
+stops the propagation from crossing language boundaries between two
+root files.
+
+<<propagate languages along use edges>>=
+worklist = list(langs)
+while worklist:
+    parent = worklist.pop()
+    lang = langs[parent]
+    if lang is CONFLICT:
+        continue
+    for child in uses.get(parent, ()):
+        if lexer_for_chunk(child) is not None:
+            continue
+        if child not in langs:
+            langs[child] = lang
+            worklist.append(child)
+        elif langs[child] is not lang and langs[child] is not CONFLICT:
+            langs[child] = CONFLICT
+@
+
+\subsection{Rendering chunk references}
+\label{sec:uses}
+
+Inside a highlighted body, a chunk reference must still look and
+behave like noweb's \LA{}name~page\RA{}.  We reproduce exactly what
+the [[totex]] backend emits for [[@use]]: the name (with noweb's
+double-square-bracket quoting converted), followed by the sub-page tag of the
+referenced definition, whose label [[noidx]] put in the [[@xref ref]]
+line just before the [[@use]].  Because we emit the same macros,
+the reference is rendered, hyperlinked, and page-numbered
+identically to an unhighlighted chunk.
+
+<<functions>>=
+def render_use(name, label):
+    """Return totex's LaTeX for a chunk reference inside code."""
+    tex = "\\LA{}" + conv_quotes(name)
+    if label is not None:
+        tex += "~{\\nwtagstyle{}\\subpageref{" + label + "}}"
+    return tex + "\\RA{}"
+@
+
+The two helpers below mirror [[TeXliteral]] and [[convquotes]] from
+[[totex.nw]]; they must stay in sync with it so that a chunk name is
+typeset the same whether or not its surroundings are highlighted.
+
+<<constants>>=
+TEX_SPECIALS = {
+    "\\": "{\\nwbackslash}",
+    "{": "{\\nwlbrace}",
+    "}": "{\\nwrbrace}",
+    "$": "{\\$}",
+    "&": "{\\&}",
+    "#": "{\\#}",
+    "^": "{\\char94}",
+    "_": "{\\_}",
+    "%": "{\\%}",
+    "~": "{\\char126}",
+}
+@
+
+<<functions>>=
+def tex_literal(text):
+    """Escape ``text`` for LaTeX like totex's TeXliteral."""
+    return "".join(TEX_SPECIALS.get(c, c) for c in text)
+@
+
+<<functions>>=
+def conv_quotes(name):
+    """Convert noweb's [[...]] quoting in a chunk name to LaTeX."""
+    out = ""
+    rest = name
+    while True:
+        head, sep, rest = rest.partition("[[")
+        out += tex_literal(head)
+        if not sep:
+            return out
+        inner, sep, rest = rest.partition("]]")
+        if not sep:
+            return out + tex_literal("[[" + inner)
+        # Like totex, extra ]s before the closing ]] stay inside.
+        while rest.startswith("]"):
+            inner += "]"
+            rest = rest[1:]
+        out += "\\code{}" + tex_literal(inner) + "\\edoc{}"
+@
+
+\subsection{Pass 2: rewriting a code chunk}
+
+A code chunk arrives as a header (everything from [[@begin code]] up
+to and including the first [[@nl]], which carries the chunk name and
+its cross-reference lines), a body of [[@text]]/[[@nl]]/[[@use]]
+lines interleaved with index and cross-reference anchors, and a
+trailer of [[@index]] lines that produce the ``Defines''
+footers.  We keep the header and trailer---[[totex]] still renders
+the chunk name, the ``used in'' notes, and the definition
+lists---and replace only the body.
+
+<<functions>>=
+def rewrite_chunk(chunk, lang, out):
+    """Rewrite one code chunk to use a minted environment.
+
+    ``chunk`` is the list of raw markup lines from ``@begin code``
+    through ``@end code``; ``lang`` is the Pygments lexer name; the
+    rewritten lines are appended to ``out``.
+    """
+    <<split off the chunk header>>
+    <<assemble body lines, relocating anchors>>
+    <<choose escape delimiters>>
+    <<emit the minted environment>>
+@
+
+The header ends at the first newline of the chunk: [[noidx]] places
+the chunk's own label, its definition line, and its
+used-in/not-used cross-references all before that [[@nl]].
+
+<<split off the chunk header>>=
+position = 0
+while position < len(chunk):
+    line = chunk[position]
+    out.append(line)
+    position += 1
+    if parse(line)[0] == "nl":
+        break
+@
+
+\subsubsection{Relocating the invisible anchors}
+\label{sec:anchors}
+
+The body contains two kinds of content: the code itself ([[@text]],
+[[@nl]], [[@use]]) and invisible anchors ([[@xref]] and [[@index]]
+lines) that [[totex]] turns into hyperlink targets and index
+entries.  We cannot leave the anchors interleaved with the code,
+since the code becomes a single verbatim environment; dropping them
+would break the identifier index, whose entries point at those
+anchors.  Instead we move them after the environment.  They are
+zero-width, and a sub-page reference resolves to the same page
+whether the anchor sits on the first or the last line of the chunk,
+so the index stays correct.
+
+Anchors are buffered in [[held]] until we know what they belong to.
+An [[@xref ref]] immediately before an [[@use]] is that reference's
+target and is consumed by the inline rendering; an [[@xref label]]
+immediately before such a reference is the use-site anchor, which
+the LaTeX backend discards anyway, so we drop it.  Everything else
+is flushed to [[relocated]] in its original order, preserving the
+adjacency of [[@xref ref]]/[[@index]] pairs, which [[totex]]
+interprets as a unit.
+
+Each element of a body line is a tuple: [[("text", string)]] for raw
+code, or [[("use", name, tex)]] for a chunk reference, carrying both
+the rendered LaTeX and the plain chunk name so that the no-delimiter
+fallback (next section) can still print something sensible.
+
+<<assemble body lines, relocating anchors>>=
+body = []
+current_line = []
+relocated = []
+held = []
+trailer = []
+while position < len(chunk):
+    line = chunk[position]
+    keyword, arg = parse(line)
+    if keyword == "end":
+        trailer = chunk[position:]
+        break
+    elif keyword == "text":
+        relocated.extend(held)
+        held = []
+        current_line.append(("text", arg or ""))
+    elif keyword == "nl":
+        relocated.extend(held)
+        held = []
+        body.append(current_line)
+        current_line = []
+    elif keyword == "use":
+        label = None
+        if held and (parse(held[-1])[1] or "").startswith("ref "):
+            label = parse(held.pop())[1][len("ref "):]
+            if held and (parse(held[-1])[1] or "").startswith("label "):
+                held.pop()
+        relocated.extend(held)
+        held = []
+        current_line.append(("use", arg, render_use(arg, label)))
+    else:
+        held.append(line)
+    position += 1
+relocated.extend(held)
+if current_line:
+    body.append(current_line)
+@
+
+\subsubsection{Escape delimiters}
+
+Minted's [[escapeinside]] option passes everything between two
+delimiter characters straight to LaTeX; that is how the chunk
+references keep their link macros.  Pygments splits the raw text on
+the delimiters before lexing, so the mechanism works regardless of
+the surrounding code.  The catch: the delimiter character must not
+occur in the chunk's own code, or innocent code would be eaten as
+LaTeX.  We therefore pick, per chunk, the first candidate character
+that does not occur in any text part.  The candidates avoid every
+character that is special to LaTeX, to keyval option parsing, or to
+our own generated macros.  If a chunk defeats all candidates, we
+degrade gracefully: references are rendered as plain
+[[<<name>>]] text and a warning goes to standard error.
+
+<<constants>>=
+ESCAPE_CANDIDATES = "|!?;^&@:*+"
+@
+
+<<choose escape delimiters>>=
+delimiter = None
+if any(part[0] == "use" for line in body for part in line):
+    code_text = "".join(part[1] for line in body
+                        for part in line if part[0] == "text")
+    for candidate in ESCAPE_CANDIDATES:
+        if candidate not in code_text:
+            delimiter = candidate
+            break
+    if delimiter is None:
+        print("tominted: warning: no usable escape delimiter; "
+              "chunk references will not be linked", file=sys.stderr)
+@
+
+\subsubsection{Emitting the environment}
+
+The environment and the code are emitted as [[@literal]] lines,
+which the backend copies verbatim into the document, each followed
+by [[@nl]] so they land on lines of their own---\texttt{fancyvrb}
+requires both the environment delimiters and the code to be in the
+source line by line.  Finally the relocated anchors and the original
+trailer follow.
+
+One subtlety: the environment opens inside noweb's [[\nwbegincode]]
+group, whose [[\setupcode]] and friends set up an almost-verbatim
+regime that minted does not expect.  Three of its properties bite,
+so the same [[@literal]] line that opens the environment first
+restores a standard regime---locally to the group, so unhighlighted
+chunks and the rest of the document are unaffected:
+
+\begin{itemize}
+\item The characters [[% ~ $ & # ^ _]] are made printable so code
+      can contain them.  Minted's machinery and our escaped link
+      macros assume the standard catcodes: with [[%]] printable,
+      minted's generated comment characters typeset as stray [[%]]
+      glyphs, and the [[~]] in a page tag prints as a literal tilde
+      instead of a tie.
+\item Newlines are made active, so that every newline ends a code
+      line and blank lines show up blank.  Our auxiliary newlines
+      around the environment would each typeset such an empty line,
+      adding vertical space below the code; restoring the normal
+      end-of-line catcode makes them harmless spaces.
+\item Spaces are made active, so that runs of spaces survive in
+      code.  An active space starts a paragraph, and when the list
+      inside [[\begin{minted}]] then issues [[\par]], noweb's
+      redefined [[\par]] turns that into a visible empty line above
+      the code.  The reset must therefore be written \emph{entirely
+      without spaces}: character codes are given numerically (the
+      backtick is also active, so [[\catcode`\%]] would not parse),
+      and every assignment is terminated by [[\relax]] instead of a
+      space.  (Redefining [[\par]] instead is not an option; minted
+      loops on a non-noweb [[\par]].)
+\end{itemize}
+
+<<constants>>=
+CATCODE_RESET = (
+    "\\catcode37=14\\relax\\catcode126=13\\relax"
+    "\\catcode36=3\\relax\\catcode38=4\\relax"
+    "\\catcode35=6\\relax\\catcode94=7\\relax"
+    "\\catcode95=8\\relax\\catcode13=5\\relax"
+)
+@
+
+The environment options make the highlighted chunk sit exactly like
+a classic one.  Noweb indents code by [[\codemargin]] through
+[[\leftskip]], but \texttt{fancyvrb} typesets its lines in a list of
+its own that ignores the surrounding [[\leftskip]], so we pass the
+same indentation explicitly as [[xleftmargin]].  The list normally
+also inserts vertical space above and below the code
+(\texttt{fancyvrb}'s [[vspace]], which defaults to [[\topsep]], plus
+[[\partopsep]]); noweb's chunk layout has none, so both are zeroed.
+
+<<constants>>=
+LIST_SPACING_RESET = "\\partopsep=0pt\\relax"
+ENV_OPTIONS = "xleftmargin=\\codemargin,vspace=0pt"
+@
+
+<<emit the minted environment>>=
+options = ENV_OPTIONS
+if delimiter is not None:
+    options += ",escapeinside={" + delimiter + delimiter + "}"
+out.append("@literal " + CATCODE_RESET + LIST_SPACING_RESET
+           + "\\begin{minted}[" + options + "]{" + lang + "}")
+out.append("@nl")
+for line in body:
+    parts = []
+    for part in line:
+        if part[0] == "text":
+            parts.append(part[1])
+        elif delimiter is not None:
+            parts.append(delimiter + part[2] + delimiter)
+        else:
+            parts.append("@<<" + part[1] + "@>>")
+    out.append("@literal " + "".join(parts))
+    out.append("@nl")
+out.append("@literal \\end{minted}")
+out.append("@nl")
+out.extend(relocated)
+out.extend(trailer)
+@
+
+\subsection{Driving the rewrite}
+
+The main loop buffers each code chunk and decides whether to rewrite
+it.  The chunk's name is the argument of its first [[@defn]]; chunks
+without a known language are copied verbatim, as are documentation
+chunks and everything else in the stream.
+
+<<functions>>=
+def rewrite_stream(lines, langs):
+    """Return the rewritten markup stream as a list of lines."""
+    out = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        keyword, arg = parse(line)
+        if keyword == "begin" and arg.startswith("code"):
+            chunk = []
+            while True:
+                chunk.append(lines[i])
+                keyword, arg = parse(lines[i])
+                i += 1
+                if keyword == "end" and arg.startswith("code"):
+                    break
+            name = next((parse(l)[1] for l in chunk
+                         if parse(l)[0] == "defn"), None)
+            lang = langs.get(name)
+            if lang is None:
+                out.extend(chunk)
+            else:
+                rewrite_chunk(chunk, lang, out)
+        else:
+            out.append(line)
+            i += 1
+    return out
+@
+
+\subsection{The main program}
+\label{sec:main}
+
+Additional lexer mappings can be passed as arguments of the form
+[[.ext=lexer]] or [[name=lexer]], e.g.\
+[[-filter 'tominted .rs=rust']].  Keys starting with a dot extend
+the extension table, all others the basename table.
+
+<<functions>>=
+def main():
+    """Filter a noweb markup stream from stdin to stdout."""
+    for argument in sys.argv[1:]:
+        key, sep, value = argument.partition("=")
+        if not sep:
+            print("tominted: unknown argument:", argument,
+                  file=sys.stderr)
+            sys.exit(1)
+        if key.startswith("."):
+            LEXERS_BY_EXT[key] = value
+        else:
+            LEXERS_BY_NAME[key] = value
+    lines = sys.stdin.read().split("\n")
+    if lines and lines[-1] == "":
+        lines.pop()
+    langs = chunk_languages(lines)
+    for line in rewrite_stream(lines, langs):
+        print(line)
+@
