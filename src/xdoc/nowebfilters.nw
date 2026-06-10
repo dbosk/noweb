@@ -141,6 +141,39 @@ which uses
 to convert HTML to 
 ASCII.
 .TP
+.BI tominted " mappings"
+The
+.B tominted
+filter makes
+.I noweave's
+LaTeX output typeset code chunks with the
+.B minted
+LaTeX package, so each chunk is syntax-highlighted.
+The language of a chunk is inferred from its name when the name looks
+like a filename (e.g.\&
+.B fib.py
+or
+.BR Makefile )
+and is inherited through chunk uses otherwise; chunks of unknown
+language keep the standard rendering.
+Chunk references inside highlighted code remain hyperlinked.
+It should be given as the last filter, after
+.BR \-index ;
+identifier definitions stay in the index, but identifier uses inside
+highlighted chunks are no longer hyperlinked.
+The optional
+.I mappings
+arguments extend the language tables, each of the form
+.I .ext=lexer
+or
+.IR name=lexer .
+The woven document must load the
+.B minted
+package and be compiled with
+.BR "pdflatex \-shell\-escape" .
+LaTeX only; do not combine with
+.BR \-html .
+.TP
 .BI xchunks " files"
 The 
 .B xchunks
