@@ -1,0 +1,73 @@
+# Python 3 support in noweb: the fib example
+
+fib.nw is a literate program that demonstrates noweb's Python 3
+support.  It defines two root chunks, <<[[fib.py]]>> and
+<<[[Makefile]]>>, so the Fibonacci program and its build file are
+tangled from the same literate source, and each is woven with its own
+syntax highlighting (Python and Make).
+
+It exercises two pieces of noweb:
+
+- autodefs.python3: finds Python definitions automatically, for the
+  identifier index and cross-references (noweave -autodefs python3).
+- tominted: typesets each code chunk with the minted LaTeX package,
+  choosing the lexer per chunk (noweave -filter tominted).
+
+## Requirements
+
+- noweb built with the Icon tools (for autodefs.python3)
+- Python 3 and Pygments (for tominted/minted)
+- LaTeX with the minted package; compile with pdflatex -shell-escape
+
+## Building
+
+Highlighted PDF (definitions index and chunk cross-references):
+
+```bash
+noweave -delay -autodefs python3 -index -filter tominted fib.nw > fib.tex
+pdflatex -shell-escape fib.tex
+pdflatex -shell-escape fib.tex
+```
+
+Classic noweb rendering, with identifier *uses* hyperlinked inside
+code (minted owns the code body in the highlighted version, so use
+links inside code exist only in this mode):
+
+```bash
+noweave -delay -autodefs python3 -index fib.nw > fib-xref.tex
+pdflatex -shell-escape fib-xref.tex
+pdflatex -shell-escape fib-xref.tex
+```
+
+The examples' Makefile wires both: `make fib.tex fib-xref.tex`.
+
+## Tangling
+
+The chunk names include the brackets, and make needs real tabs, so:
+
+```bash
+notangle -R'[[fib.py]]' fib.nw > fib.py
+notangle -t8 -R'[[Makefile]]' fib.nw > Makefile
+```
+
+(`-t8` copies tabs through; by default notangle expands them to
+spaces, which breaks make.)  `make fib-run` in this directory tangles
+both into the fib/ subdirectory and runs the tangled Makefile's test
+target.
+
+## What autodefs.python3 indexes
+
+By default (module-level interface):
+
+- top-level `def` and `async def` functions: `fib`, `main`
+- top-level classes
+- top-level simple assignments `NAME = value`: `DEFAULT_COUNT`
+
+With `-local` (noweave -filter 'autodefs.python3 -local' -index), it
+additionally indexes methods and nested functions.  Function-local
+variables, tuple unpacking, attribute assignments and annotated
+assignments are never indexed.
+
+Note that the index of fib.pdf also lists `PYTHON` and `COUNT` from
+the Makefile chunk: -autodefs applies to every code chunk, and make's
+variable assignments match the Python assignment pattern.

@@ -24,7 +24,8 @@ www: $(HTML)
 	copy -v README.h $(WWW)/index.html
 
 clean:
-	rm -f *~ *.aux *.tex *.dvi *.log *.html *.toc
+	rm -f *~ *.aux *.tex *.dvi *.log *.html *.toc *.pdf *.idx *.ilg *.ind *.out
+	rm -rf _minted fib
 
 clobber: clean
 
@@ -36,6 +37,32 @@ dag.html: dag.nw
 	$(NOWEAVE) -filter l2h -index -autodefs icon -html dag.nw > $@
 dag.tex: dag.nw
 	$(NOWEAVE) -index -autodefs icon dag.nw > $@
+# fib.tex is highlighted with minted; fib-xref.tex is the classic
+# rendering, in which identifier uses inside code are hyperlinked.
+# Both need pdflatex -shell-escape (minted runs Pygments); see
+# README.python.
+fib.tex: fib.nw
+	$(NOWEAVE) -delay -autodefs python3 -index -filter tominted fib.nw > $@
+fib-xref.tex: fib.nw
+	$(NOWEAVE) -delay -autodefs python3 -index fib.nw > $@
+fib.pdf: fib.tex
+	mkdir -p _minted
+	pdflatex -shell-escape fib.tex
+	pdflatex -shell-escape fib.tex
+fib-xref.pdf: fib-xref.tex
+	pdflatex -shell-escape fib-xref.tex
+	pdflatex -shell-escape fib-xref.tex
+# The tangled Makefile would clobber this one, so fib tangles into
+# its own subdirectory; -t8 keeps the tabs make needs.
+fib/fib.py: fib.nw
+	mkdir -p fib
+	notangle -R'[[fib.py]]' fib.nw > $@
+fib/Makefile: fib.nw
+	mkdir -p fib
+	notangle -t8 -R'[[Makefile]]' fib.nw > $@
+fib-run: fib/fib.py fib/Makefile
+	$(MAKE) -C fib test
+	$(MAKE) -C fib run
 mipscoder.html: mipscoder.nw
 	$(NOWEAVE) -filter l2h -index -autodefs sml -html mipscoder.nw > $@
 mipscoder.tex: mipscoder.nw

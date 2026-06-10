@@ -1,0 +1,155 @@
+\documentclass{article}
+\usepackage{noweb}
+\usepackage{minted}
+\pagestyle{noweb}
+\title{Fibonacci numbers:\\
+  a literate Python program with its own Makefile}
+\author{Daniel Bosk}
+\begin{document}
+\maketitle
+
+@ \section{Introduction}
+
+This example demonstrates noweb's Python~3 support.  One literate
+source file defines two root chunks, [[fib.py]] and [[Makefile]], so
+the program and its build file are tangled from the same document.  When woven with the [[tominted]] filter, each
+chunk is syntax-highlighted according to its own language---Python
+for the program, Make for the build file---while the
+[[autodefs.python3]] filter fills the identifier index at the end of
+this document.
+
+To produce this document, run:
+\begin{verbatim}
+noweave -delay -autodefs python3 -index -filter tominted fib.nw \
+    > fib.tex
+pdflatex -shell-escape fib.tex
+\end{verbatim}
+The roots are tangled with the chunk names exactly as they appear,
+brackets included:
+\texttt{notangle -R'[{}[fib.py]{}]' fib.nw > fib.py} and
+\texttt{notangle -t8 -R'[{}[Makefile]{}]' fib.nw > Makefile}.
+(The brackets cannot be written verbatim here: noweb would read
+them as a quotation.)  See the accompanying [[README.python]] for
+variations.
+
+\section{The program}
+
+The program prints the first \(n\) Fibonacci numbers.  The whole
+file is little more than a docstring, the computation, and a small
+command-line interface; the chunk references below are filled in by
+the rest of this section.
+
+<<[[fib.py]]>>=
+"""Print the first n Fibonacci numbers."""
+
+import sys
+
+<<constants>>
+<<functions>>
+
+if __name__ == "__main__":
+    main()
+@
+
+\subsection{Computing the numbers}
+
+We compute the sequence iteratively rather than with the classic
+recursive definition: the recursion recomputes earlier numbers
+exponentially often, while the running pair [[a, b]] carries exactly
+the state one step needs, giving linear time and no recursion-depth
+limit.  The doctest in the docstring doubles as the test suite,
+which the [[test]] target of the Makefile runs.
+
+<<functions>>=
+def fib(n):
+    """Return a list of the first ``n`` Fibonacci numbers.
+
+    >>> fib(10)
+    [0, 1, 1, 2, 3, 5, 8, 13, 21, 34]
+    >>> fib(0)
+    []
+    """
+    numbers = []
+    a, b = 0, 1
+    while len(numbers) < n:
+        numbers.append(a)
+        a, b = b, a + b
+    return numbers
+@
+
+\subsection{The command-line interface}
+
+The count is taken from the command line so that the Makefile's
+targets can vary it; without an argument we default to
+[[DEFAULT_COUNT]].  We print the numbers on one line because that
+makes the output trivial to compare in a shell test.
+
+<<constants>>=
+DEFAULT_COUNT = 10
+@
+
+<<functions>>=
+def main():
+    """Print the first n Fibonacci numbers, n given in argv."""
+    if len(sys.argv) > 1:
+        n = int(sys.argv[1])
+    else:
+        n = DEFAULT_COUNT
+    print(" ".join(str(number) for number in fib(n)))
+@
+
+\section{The Makefile}
+
+The build file is part of the same literate program, so the
+document explains the program and how to run it in one place.  The
+[[test]] target runs the doctests in [[fib.py]]; [[doctest]] is
+silent on success, so we print a confirmation.
+
+A word of warning when tangling: make requires recipe lines to start
+with a tab character, but [[notangle]] expands tabs to spaces by
+default.  Tangle this chunk with [[notangle -t8]], which copies
+tabs (the [[README.python]] and the examples' Makefile do this).
+
+<<[[Makefile]]>>=
+PYTHON=python3
+
+<<default and test targets>>
+
+clean:
+	rm -rf __pycache__
+@
+
+The default target shows the program's ordinary output; [[test]]
+verifies it.
+
+<<default and test targets>>=
+run: fib.py
+	$(PYTHON) fib.py $(COUNT)
+
+test: fib.py
+	$(PYTHON) -m doctest fib.py
+	@echo "doctests pass"
+@
+
+The count can be overridden from the command line, e.g.\
+[[make run COUNT=20]]; if it is empty, [[fib.py]] falls back to
+[[DEFAULT_COUNT]].
+
+<<[[Makefile]]>>=
+COUNT=
+@
+
+Note that [[PYTHON]] and [[COUNT]] appear in the identifier index
+below: [[noweave]] applies [[-autodefs python3]] to every code
+chunk, and make's variable assignments happen to match the Python
+filter's assignment pattern.  In mixed-language documents this is
+the usual situation---compare [[scanner.nw]] in this directory,
+which combines [[-autodefs c]] and [[-autodefs yacc]].
+
+\section{Chunks and identifiers}
+
+\nowebchunks
+
+\nowebindex
+
+\end{document}
