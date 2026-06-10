@@ -155,7 +155,10 @@ or
 .BR Makefile )
 and is inherited through chunk uses otherwise; chunks of unknown
 language keep the standard rendering.
-Chunk references inside highlighted code remain hyperlinked.
+Chunk references inside highlighted code remain hyperlinked,
+except inside Python string literals, where a reference is shown
+as plain noweb syntax and the referenced chunk is typeset as
+plain text rather than code (suiting docstring chunks).
 It should be given as the last filter, after
 .BR \-index ;
 identifier definitions stay in the index, but identifier uses inside

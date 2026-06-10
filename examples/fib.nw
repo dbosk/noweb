@@ -64,10 +64,7 @@ which the [[test]] target of the Makefile runs.
 def fib(n):
     """Return a list of the first ``n`` Fibonacci numbers.
 
-    >>> fib(10)
-    [0, 1, 1, 2, 3, 5, 8, 13, 21, 34]
-    >>> fib(0)
-    []
+    <<[[fib]] docstring details>>
     """
     numbers = []
     a, b = 0, 1
@@ -75,6 +72,24 @@ def fib(n):
         numbers.append(a)
         a, b = b, a + b
     return numbers
+@
+
+The body of the docstring lives in a chunk of its own.  Note how
+[[tominted]] handles it: the filter detects that the reference above
+sits inside the triple-quoted string, so the chunk below is typeset
+as plain text rather than Python---its prose would otherwise sprout
+spuriously highlighted keywords---and the reference itself is shown
+as literal noweb syntax, because a hyperlink cannot survive inside
+what Pygments treats as a single string token.
+
+<<[[fib]] docstring details>>=
+The sequence starts from F(0) = 0 and F(1) = 1; each later number
+is the sum of the previous two.
+
+>>> fib(10)
+[0, 1, 1, 2, 3, 5, 8, 13, 21, 34]
+>>> fib(0)
+[]
 @
 
 \subsection{The command-line interface}

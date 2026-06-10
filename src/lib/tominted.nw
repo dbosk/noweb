@@ -164,28 +164,46 @@ CONFLICT = object()
 
 <<functions>>=
 def chunk_languages(lines):
-    """Compute a map from chunk name to Pygments lexer name.
+    """Compute chunk languages and string-embedded use sites.
 
-    Languages are seeded from filename-like chunk names and
-    propagated to the chunks they use, transitively.  Chunks with
-    conflicting inherited languages are omitted from the result.
+    Returns a pair ``(langs, plain_uses)``.  ``langs`` maps chunk
+    names to Pygments lexer names: languages are seeded from
+    filename-like chunk names and propagated to the chunks they
+    use, transitively; chunks with conflicting inherited languages
+    are omitted.  ``plain_uses`` is the set of indices into
+    ``lines`` of the ``@use`` lines that sit inside a Python
+    string literal and must be rendered as plain text.
     """
     uses = {}
     langs = {}
-    <<collect definitions and uses>>
+    edges = []
+    <<collect definitions, uses and string contexts>>
     <<propagate languages along use edges>>
-    return {name: lang for name, lang in langs.items()
-            if lang is not CONFLICT}
+    <<identify string-embedded use sites>>
+    return ({name: lang for name, lang in langs.items()
+             if lang is not CONFLICT},
+            plain_uses)
 @
 
 A [[@defn]] names the chunk that the following lines (until
 [[@end code]]) belong to, so we track the current chunk while inside
 a code chunk and attribute every [[@use]] to it.
 
-<<collect definitions and uses>>=
+Alongside the use edges we track whether each use site sits inside
+a string literal: per chunk name, we toggle a flag on every line
+whose text contains an odd number of triple-quote delimiters.  The
+state is kept per \emph{name} rather than per chunk instance
+because noweb concatenates same-named chunks when tangling, so a
+string opened in one instance is still open in the next.  Each use
+is recorded twice: as an edge for the propagation, and---together
+with its line index and string context---in [[edges]], from which
+the plain-text use sites are computed once the languages are known.
+
+<<collect definitions, uses and string contexts>>=
 current = None
 in_code = False
-for line in lines:
+in_string = {}
+for index, line in enumerate(lines):
     keyword, arg = parse(line)
     if keyword == "begin" and arg.startswith("code"):
         in_code = True
@@ -196,11 +214,17 @@ for line in lines:
     elif in_code and keyword == "defn":
         current = arg
         uses.setdefault(current, set())
+        in_string.setdefault(current, False)
         lexer = lexer_for_chunk(current)
         if lexer is not None:
             langs[current] = lexer
+    elif in_code and keyword == "text" and current is not None:
+        flips = sum((arg or "").count(d) for d in STRING_DELIMITERS)
+        if flips % 2:
+            in_string[current] = not in_string[current]
     elif in_code and keyword == "use" and current is not None:
-        uses[current].add(arg)
+        uses[current].add((arg, in_string[current]))
+        edges.append((current, arg, in_string[current], index))
 @
 
 The propagation is a straightforward worklist algorithm.  A chunk
@@ -216,14 +240,72 @@ while worklist:
     lang = langs[parent]
     if lang is CONFLICT:
         continue
-    for child in uses.get(parent, ()):
+    for child, embedded in uses.get(parent, ()):
         if lexer_for_chunk(child) is not None:
             continue
+        if embedded and lang in PYTHON_LEXERS:
+            inherited = "text"
+        else:
+            inherited = lang
         if child not in langs:
-            langs[child] = lang
+            langs[child] = inherited
             worklist.append(child)
-        elif langs[child] is not lang and langs[child] is not CONFLICT:
+        elif langs[child] is not CONFLICT and langs[child] != inherited:
             langs[child] = CONFLICT
+@
+
+\subsection{Chunk uses inside Python strings}
+\label{sec:strings}
+
+A literate Python program may put a docstring's text in a chunk of
+its own:
+
+\begin{verbatim}
+def fib(n):
+    """
+    <fib docstring>
+    """
+    ...
+\end{verbatim}
+(angle brackets doubled in the real source).  Treating that use like
+any other goes wrong twice.  First, the docstring chunk would
+inherit the Python lexer and its prose would be highlighted as
+code---words like [[for]] and [[is]] become keywords.  Second, the
+reference itself cannot be rendered as a link there: Pygments lexes
+the surrounding triple quotes as a single string token, and
+minted's [[escapeinside]] is documented not to work inside string
+and comment tokens, so the escaped link macros would leak verbatim
+into the typeset string.
+
+Both problems share one diagnosis---the use site sits inside an
+open string literal---so the string tracking above fixes both.  A
+chunk used inside a string in a Python chunk inherits the plain
+[[text]] lexer instead of Python: it keeps minted's geometry and
+font, but gets no token colouring.  And the use site itself is
+rendered as literal noweb source syntax, which Pygments colours as
+part of the string, instead of as an escaped link
+(Section~\ref{sec:uses}).
+
+The parity heuristic is deliberately naive: a triple quote inside a
+comment or a single-quoted string fools it, and it does not
+distinguish [[''']] from [["""]] when pairing delimiters.  Every
+failure mode merely degrades to the behaviour without the
+heuristic, and the common literate pattern---docstring delimiters
+on their own lines around the use---is handled correctly.  The
+conflict rule composes naturally: a chunk used both inside a
+docstring and as real code inherits [[text]] and a code lexer,
+conflicts, and falls back to noweb's classic rendering.
+
+<<constants>>=
+PYTHON_LEXERS = {"python", "python3", "py", "py3"}
+STRING_DELIMITERS = ('"""', "'''")
+@
+
+<<identify string-embedded use sites>>=
+plain_uses = set()
+for parent, child, embedded, index in edges:
+    if embedded and langs.get(parent) in PYTHON_LEXERS:
+        plain_uses.add(index)
 @
 
 \subsection{Rendering chunk references}
@@ -304,11 +386,13 @@ the chunk name, the ``used in'' notes, and the definition
 lists---and replace only the body.
 
 <<functions>>=
-def rewrite_chunk(chunk, lang, out):
+def rewrite_chunk(chunk, lang, out, start, plain_uses):
     """Rewrite one code chunk to use a minted environment.
 
     ``chunk`` is the list of raw markup lines from ``@begin code``
-    through ``@end code``; ``lang`` is the Pygments lexer name; the
+    through ``@end code``, beginning at index ``start`` of the
+    stream; ``lang`` is the Pygments lexer name; ``plain_uses``
+    holds the stream indices of string-embedded uses; the
     rewritten lines are appended to ``out``.
     """
     <<split off the chunk header>>
@@ -388,7 +472,10 @@ while position < len(chunk):
                 held.pop()
         relocated.extend(held)
         held = []
-        current_line.append(("use", arg, render_use(arg, label)))
+        if start + position in plain_uses:
+            current_line.append(("text", "@<<" + arg + "@>>"))
+        else:
+            current_line.append(("use", arg, render_use(arg, label)))
     else:
         held.append(line)
     position += 1
@@ -525,7 +612,7 @@ without a known language are copied verbatim, as are documentation
 chunks and everything else in the stream.
 
 <<functions>>=
-def rewrite_stream(lines, langs):
+def rewrite_stream(lines, langs, plain_uses):
     """Return the rewritten markup stream as a list of lines."""
     out = []
     i = 0
@@ -533,6 +620,7 @@ def rewrite_stream(lines, langs):
         line = lines[i]
         keyword, arg = parse(line)
         if keyword == "begin" and arg.startswith("code"):
+            start = i
             chunk = []
             while True:
                 chunk.append(lines[i])
@@ -546,7 +634,7 @@ def rewrite_stream(lines, langs):
             if lang is None:
                 out.extend(chunk)
             else:
-                rewrite_chunk(chunk, lang, out)
+                rewrite_chunk(chunk, lang, out, start, plain_uses)
         else:
             out.append(line)
             i += 1
@@ -577,7 +665,7 @@ def main():
     lines = sys.stdin.read().split("\n")
     if lines and lines[-1] == "":
         lines.pop()
-    langs = chunk_languages(lines)
-    for line in rewrite_stream(lines, langs):
+    langs, plain_uses = chunk_languages(lines)
+    for line in rewrite_stream(lines, langs, plain_uses):
         print(line)
 @
