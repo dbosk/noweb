@@ -1,0 +1,250 @@
+#!/usr/bin/env python3
+"""Noweave filter that annotates code chunks with their language.
+
+Reads a noweb markup stream on stdin and writes it to stdout,
+adding an ``@language`` line to every code chunk whose language
+can be determined from filename-like chunk names, transitively
+through chunk uses.  Run it as the first filter, before any
+filter that consumes language information (e.g. the autodefs
+filters).  See nowebfilters(7).
+"""
+
+import sys
+
+LEXERS_BY_NAME = {
+    "Makefile": "make",
+    "makefile": "make",
+    "GNUmakefile": "make",
+    "Dockerfile": "docker",
+    "CMakeLists.txt": "cmake",
+}
+LEXERS_BY_EXT = {
+    ".py": "python",
+    ".pyw": "python",
+    ".mk": "make",
+    ".c": "c",
+    ".h": "c",
+    ".icn": "icon",
+    ".sh": "bash",
+    ".bash": "bash",
+    ".zsh": "bash",
+    ".sml": "sml",
+    ".tex": "latex",
+    ".js": "javascript",
+    ".mjs": "javascript",
+    ".ts": "typescript",
+    ".java": "java",
+    ".cpp": "cpp",
+    ".cc": "cpp",
+    ".cxx": "cpp",
+    ".hpp": "cpp",
+    ".hh": "cpp",
+    ".cs": "csharp",
+    ".go": "go",
+    ".rs": "rust",
+    ".rb": "ruby",
+    ".php": "php",
+    ".swift": "swift",
+    ".kt": "kotlin",
+    ".kts": "kotlin",
+    ".scala": "scala",
+    ".hs": "haskell",
+    ".ml": "ocaml",
+    ".mli": "ocaml",
+    ".lua": "lua",
+    ".pl": "perl",
+    ".pm": "perl",
+    ".r": "r",
+    ".R": "r",
+    ".jl": "julia",
+    ".sql": "sql",
+    ".html": "html",
+    ".css": "css",
+    ".json": "json",
+    ".yml": "yaml",
+    ".yaml": "yaml",
+    ".toml": "toml",
+    ".md": "markdown",
+    ".zig": "zig",
+    ".dart": "dart",
+    ".ex": "elixir",
+    ".exs": "elixir",
+    ".erl": "erlang",
+    ".f90": "fortran",
+    ".f95": "fortran",
+}
+try:
+    from pygments.lexers import find_lexer_class_for_filename
+except ImportError:
+    find_lexer_class_for_filename = None
+PYGMENTS_ALIASES = {}
+CONFLICT = object()
+LANGUAGE_SYNONYMS = {
+    "c++": "cpp",
+    "sh": "bash",
+    "caml": "ocaml",
+}
+PYTHON_LEXERS = {"python", "python3", "py", "py3"}
+STRING_DELIMITERS = ('"""', "'''")
+def lexer_for_chunk(name):
+    """Return the Pygments lexer for chunk ``name``, or None.
+
+    The chunk name may use noweb's ``[[...]]`` quoting and may
+    contain directory separators; only the basename decides.
+    Names the built-in tables do not cover are matched against
+    Pygments' filename patterns when Pygments is installed.
+    """
+    if name.startswith("[[") and name.endswith("]]"):
+        name = name[2:-2]
+    basename = name.rsplit("/", 1)[-1]
+    if basename in LEXERS_BY_NAME:
+        return LEXERS_BY_NAME[basename]
+    dot = basename.rfind(".")
+    if dot >= 0 and basename[dot:] in LEXERS_BY_EXT:
+        return LEXERS_BY_EXT[basename[dot:]]
+    return pygments_lexer_for_chunk(basename)
+def pygments_lexer_for_chunk(basename):
+    """Return the alias of Pygments' lexer for ``basename``, or None."""
+    if find_lexer_class_for_filename is None:
+        return None
+    if basename not in PYGMENTS_ALIASES:
+        cls = find_lexer_class_for_filename(basename)
+        PYGMENTS_ALIASES[basename] = (
+            cls.aliases[0] if cls is not None and cls.aliases else None)
+    return PYGMENTS_ALIASES[basename]
+def parse(line):
+    """Split a markup line into (keyword, argument).
+
+    The argument is None when the line is only ``@keyword``.
+    """
+    space = line.find(" ")
+    if space < 0:
+        return line[1:], None
+    return line[1:space], line[space + 1:]
+def chunk_languages(lines):
+    """Compute chunk languages and string-embedded use sites.
+
+    Returns a pair ``(langs, plain_uses)``.  ``langs`` maps chunk
+    names to Pygments lexer names: languages are seeded from
+    ``@language`` annotations and filename-like chunk names, and
+    propagated to the chunks they use, transitively; chunks with
+    conflicting inherited languages are omitted.  ``plain_uses``
+    is the set of indices into ``lines`` of the ``@use`` lines
+    that sit inside a Python string literal and must be rendered
+    as plain text.
+    """
+    uses = {}
+    langs = {}
+    explicit = set()
+    edges = []
+    current = None
+    in_code = False
+    in_string = {}
+    for index, line in enumerate(lines):
+        keyword, arg = parse(line)
+        if keyword == "begin" and arg.startswith("code"):
+            in_code = True
+            current = None
+        elif keyword == "end" and arg.startswith("code"):
+            in_code = False
+            current = None
+        elif in_code and keyword == "defn":
+            current = arg
+            uses.setdefault(current, set())
+            in_string.setdefault(current, False)
+            if current not in explicit:
+                lexer = lexer_for_chunk(current)
+                if lexer is not None:
+                    langs[current] = lexer
+        elif in_code and keyword == "language" and current is not None:
+            langs[current] = LANGUAGE_SYNONYMS.get(arg, arg)
+            explicit.add(current)
+        elif in_code and keyword == "text" and current is not None:
+            flips = sum((arg or "").count(d) for d in STRING_DELIMITERS)
+            if flips % 2:
+                in_string[current] = not in_string[current]
+        elif in_code and keyword == "use" and current is not None:
+            uses[current].add((arg, in_string[current]))
+            edges.append((current, arg, in_string[current], index))
+    worklist = list(langs)
+    while worklist:
+        parent = worklist.pop()
+        lang = langs[parent]
+        if lang is CONFLICT:
+            continue
+        for child, embedded in uses.get(parent, ()):
+            if child in explicit or lexer_for_chunk(child) is not None:
+                continue
+            if embedded and lang in PYTHON_LEXERS:
+                inherited = "text"
+            else:
+                inherited = lang
+            if child not in langs:
+                langs[child] = inherited
+                worklist.append(child)
+            elif langs[child] is not CONFLICT and langs[child] != inherited:
+                langs[child] = CONFLICT
+    plain_uses = set()
+    for parent, child, embedded, index in edges:
+        if embedded and langs.get(parent) in PYTHON_LEXERS:
+            plain_uses.add(index)
+    return ({name: lang for name, lang in langs.items()
+             if lang is not CONFLICT},
+            plain_uses)
+def add_mapping(argument):
+    """Add a ``.ext=lexer`` or ``name=lexer`` table mapping.
+
+    Returns False when ``argument`` is not of that form.
+    """
+    key, sep, value = argument.partition("=")
+    if not sep:
+        return False
+    if key.startswith("."):
+        LEXERS_BY_EXT[key] = value
+    else:
+        LEXERS_BY_NAME[key] = value
+    return True
+def autolang_main():
+    """Annotate a noweb markup stream from stdin to stdout."""
+    for argument in sys.argv[1:]:
+        if not add_mapping(argument):
+            print("autolang: unknown argument:", argument,
+                  file=sys.stderr)
+            sys.exit(1)
+    lines = sys.stdin.read().split("\n")
+    if lines and lines[-1] == "":
+        lines.pop()
+    langs, _ = chunk_languages(lines)
+    for line in annotate(lines, langs):
+        print(line)
+def annotate(lines, langs):
+    """Return ``lines`` with @language added to known chunks."""
+    out = []
+    i = 0
+    while i < len(lines):
+        keyword, arg = parse(lines[i])
+        if keyword == "begin" and arg.startswith("code"):
+            chunk = []
+            while True:
+                chunk.append(lines[i])
+                keyword, arg = parse(lines[i])
+                i += 1
+                if keyword == "end" and arg.startswith("code"):
+                    break
+            name = next((parse(l)[1] for l in chunk
+                         if parse(l)[0] == "defn"), None)
+            lang = langs.get(name)
+            annotated = any(parse(l)[0] == "language" for l in chunk)
+            for line in chunk:
+                out.append(line)
+                if (lang is not None and not annotated
+                        and parse(line)[0] == "defn"):
+                    out.append("@language " + lang)
+                    annotated = True
+        else:
+            out.append(lines[i])
+            i += 1
+    return out
+
+if __name__ == "__main__":
+    autolang_main()

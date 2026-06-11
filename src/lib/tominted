@@ -77,32 +77,13 @@ except ImportError:
     find_lexer_class_for_filename = None
 PYGMENTS_ALIASES = {}
 CONFLICT = object()
+LANGUAGE_SYNONYMS = {
+    "c++": "cpp",
+    "sh": "bash",
+    "caml": "ocaml",
+}
 PYTHON_LEXERS = {"python", "python3", "py", "py3"}
 STRING_DELIMITERS = ('"""', "'''")
-TEX_SPECIALS = {
-    "\\": "{\\nwbackslash}",
-    "{": "{\\nwlbrace}",
-    "}": "{\\nwrbrace}",
-    "$": "{\\$}",
-    "&": "{\\&}",
-    "#": "{\\#}",
-    "^": "{\\char94}",
-    "_": "{\\_}",
-    "%": "{\\%}",
-    "~": "{\\char126}",
-}
-ESCAPE_CANDIDATES = "|!?;^&@:*+"
-CATCODE_RESET = (
-    "\\catcode37=14\\relax\\catcode126=13\\relax"
-    "\\catcode36=3\\relax\\catcode38=4\\relax"
-    "\\catcode35=6\\relax\\catcode94=7\\relax"
-    "\\catcode95=8\\relax\\catcode13=5\\relax"
-)
-LIST_SPACING_RESET = "\\partopsep=0pt\\relax"
-ENV_OPTIONS = "xleftmargin=\\codemargin,vspace=0pt"
-CUSTOM_LEXER = None
-ESCAPE_LEFT = "\ue000"
-ESCAPE_RIGHT = "\ue001"
 def lexer_for_chunk(name):
     """Return the Pygments lexer for chunk ``name``, or None.
 
@@ -143,14 +124,16 @@ def chunk_languages(lines):
 
     Returns a pair ``(langs, plain_uses)``.  ``langs`` maps chunk
     names to Pygments lexer names: languages are seeded from
-    filename-like chunk names and propagated to the chunks they
-    use, transitively; chunks with conflicting inherited languages
-    are omitted.  ``plain_uses`` is the set of indices into
-    ``lines`` of the ``@use`` lines that sit inside a Python
-    string literal and must be rendered as plain text.
+    ``@language`` annotations and filename-like chunk names, and
+    propagated to the chunks they use, transitively; chunks with
+    conflicting inherited languages are omitted.  ``plain_uses``
+    is the set of indices into ``lines`` of the ``@use`` lines
+    that sit inside a Python string literal and must be rendered
+    as plain text.
     """
     uses = {}
     langs = {}
+    explicit = set()
     edges = []
     current = None
     in_code = False
@@ -167,9 +150,13 @@ def chunk_languages(lines):
             current = arg
             uses.setdefault(current, set())
             in_string.setdefault(current, False)
-            lexer = lexer_for_chunk(current)
-            if lexer is not None:
-                langs[current] = lexer
+            if current not in explicit:
+                lexer = lexer_for_chunk(current)
+                if lexer is not None:
+                    langs[current] = lexer
+        elif in_code and keyword == "language" and current is not None:
+            langs[current] = LANGUAGE_SYNONYMS.get(arg, arg)
+            explicit.add(current)
         elif in_code and keyword == "text" and current is not None:
             flips = sum((arg or "").count(d) for d in STRING_DELIMITERS)
             if flips % 2:
@@ -184,7 +171,7 @@ def chunk_languages(lines):
         if lang is CONFLICT:
             continue
         for child, embedded in uses.get(parent, ()):
-            if lexer_for_chunk(child) is not None:
+            if child in explicit or lexer_for_chunk(child) is not None:
                 continue
             if embedded and lang in PYTHON_LEXERS:
                 inherited = "text"
@@ -202,6 +189,43 @@ def chunk_languages(lines):
     return ({name: lang for name, lang in langs.items()
              if lang is not CONFLICT},
             plain_uses)
+def add_mapping(argument):
+    """Add a ``.ext=lexer`` or ``name=lexer`` table mapping.
+
+    Returns False when ``argument`` is not of that form.
+    """
+    key, sep, value = argument.partition("=")
+    if not sep:
+        return False
+    if key.startswith("."):
+        LEXERS_BY_EXT[key] = value
+    else:
+        LEXERS_BY_NAME[key] = value
+    return True
+TEX_SPECIALS = {
+    "\\": "{\\nwbackslash}",
+    "{": "{\\nwlbrace}",
+    "}": "{\\nwrbrace}",
+    "$": "{\\$}",
+    "&": "{\\&}",
+    "#": "{\\#}",
+    "^": "{\\char94}",
+    "_": "{\\_}",
+    "%": "{\\%}",
+    "~": "{\\char126}",
+}
+ESCAPE_CANDIDATES = "|!?;^&@:*+"
+CATCODE_RESET = (
+    "\\catcode37=14\\relax\\catcode126=13\\relax"
+    "\\catcode36=3\\relax\\catcode38=4\\relax"
+    "\\catcode35=6\\relax\\catcode94=7\\relax"
+    "\\catcode95=8\\relax\\catcode13=5\\relax"
+)
+LIST_SPACING_RESET = "\\partopsep=0pt\\relax"
+ENV_OPTIONS = "xleftmargin=\\codemargin,vspace=0pt"
+CUSTOM_LEXER = None
+ESCAPE_LEFT = "\ue000"
+ESCAPE_RIGHT = "\ue001"
 def render_use(name, label):
     """Return totex's LaTeX for a chunk reference inside code."""
     tex = "\\LA{}" + conv_quotes(name)
@@ -240,8 +264,10 @@ def rewrite_chunk(chunk, lang, out, start, plain_uses):
     position = 0
     while position < len(chunk):
         line = chunk[position]
-        out.append(line)
         position += 1
+        if parse(line)[0] == "language":
+            continue
+        out.append(line)
         if parse(line)[0] == "nl":
             break
     body = []
@@ -276,6 +302,8 @@ def rewrite_chunk(chunk, lang, out, start, plain_uses):
                 current_line.append(("text", "<<" + arg + ">>"))
             else:
                 current_line.append(("use", arg, render_use(arg, label)))
+        elif keyword == "language":
+            pass
         else:
             held.append(line)
         position += 1
@@ -349,7 +377,8 @@ def rewrite_stream(lines, langs, plain_uses):
                          if parse(l)[0] == "defn"), None)
             lang = langs.get(name)
             if lang is None:
-                out.extend(chunk)
+                out.extend(l for l in chunk
+                           if parse(l)[0] != "language")
             else:
                 rewrite_chunk(chunk, lang, out, start, plain_uses)
         else:
@@ -369,15 +398,10 @@ def main():
                 sys.exit(1)
             CUSTOM_LEXER = arguments.pop(0)
             continue
-        key, sep, value = argument.partition("=")
-        if not sep:
+        if not add_mapping(argument):
             print("tominted: unknown argument:", argument,
                   file=sys.stderr)
             sys.exit(1)
-        if key.startswith("."):
-            LEXERS_BY_EXT[key] = value
-        else:
-            LEXERS_BY_NAME[key] = value
     lines = sys.stdin.read().split("\n")
     if lines and lines[-1] == "":
         lines.pop()
