@@ -2,9 +2,10 @@
 global showlocal
 procedure main(args)
   showlocal := !args == "-local"
+  defnslanguages := set(["python", "python3"])
   go()
 end
-#line 112 "python3defs.nw"
+#line 122 "python3defs.nw"
 procedure postpass(name, arg)
   static kind
   initial {
@@ -14,7 +15,7 @@ procedure postpass(name, arg)
     "begin" : arg ? kind := tab(upto(' ')|0)
     "text" : if kind == "code" then {
       
-#line 145 "python3defs.nw"
+#line 155 "python3defs.nw"
 arg ? {
   # Skip empty lines and comments
   if /arg | *arg = 0 then return
@@ -25,18 +26,18 @@ arg ? {
   if ="async " then tab(many(' \t'))  # async def is still a def
   if =("def "|"class ") then {
     
-#line 171 "python3defs.nw"
+#line 181 "python3defs.nw"
 {
   tab(many(' \t'))  # skip whitespace after keyword
   if ident := python_ident() then
     if \showlocal | \toplevel then
       writedefn(ident)
 }
-#line 155 "python3defs.nw"
+#line 165 "python3defs.nw"
   }
   else if \toplevel then {
     
-#line 193 "python3defs.nw"
+#line 203 "python3defs.nw"
 {
   if ident := python_ident() then {
     tab(many(' \t'))  # optional whitespace before =
@@ -44,15 +45,15 @@ arg ? {
       writedefn(ident)
   }
 }
-#line 158 "python3defs.nw"
+#line 168 "python3defs.nw"
   }
 }
-#line 121 "python3defs.nw"
+#line 131 "python3defs.nw"
     }
   }
   return
 end
-#line 213 "python3defs.nw"
+#line 223 "python3defs.nw"
 procedure python_ident()
   static alpha, alnum
   initial {
@@ -65,53 +66,69 @@ procedure python_ident()
   else
     fail
 end
-#line 233 "python3defs.nw"
+#line 243 "python3defs.nw"
 procedure prepass(name, arg)
   if name == "end" then writedefn(&null) # force newline flush
   return
 end
-#line 242 "python3defs.nw"
+#line 252 "python3defs.nw"
 procedure rcsinfo ()
   return "$Id: python3defs.nw,v 1.1 2026/06/10 12:00:00 dbosk Exp $"
 end
-#line 1 "defns.nw"
+#line 14 "defns.nw"
+global defnslanguages
+
 procedure go()
-  local line
+  local line, chunklang
   while line := read() do {
-    apply(prepass, line)
-    write(line)
-    if match("@fatal ", line) then exit(1)
-    apply(postpass, line)
+    
+#line 42 "defns.nw"
+line ? if ="@begin " then chunklang := &null
+       else if ="@language " then chunklang := tab(0)
+#line 20 "defns.nw"
+    if 
+#line 47 "defns.nw"
+(match("@text ", line) & \defnslanguages & \chunklang &
+ not member(defnslanguages, chunklang))
+#line 20 "defns.nw"
+                                                       then
+      write(line)
+    else {
+      apply(prepass, line)
+      write(line)
+      if match("@fatal ", line) then exit(1)
+      apply(postpass, line)
+    }
   }
 end
 
 procedure apply(pass, line)
     line ? (="@" & pass(tab(upto(' ')|0),  if =" " then tab(0) else &null))
 end
-#line 18 "defns.nw"
+#line 53 "defns.nw"
 procedure writedefn(defn, locl)
   static indextext
   initial indextext := ""
   if /defn then
     *indextext > 0 & 
-#line 31 "defns.nw"
+#line 66 "defns.nw"
 { # write("@index nl")		# don't!
   indextext := ""
 }
-#line 23 "defns.nw"
+#line 58 "defns.nw"
   else {
     if *indextext + *defn > 65 then 
-#line 31 "defns.nw"
+#line 66 "defns.nw"
 { # write("@index nl")		# don't!
   indextext := ""
 }
-#line 25 "defns.nw"
+#line 60 "defns.nw"
     write(if \locl then "@index localdefn " else "@index defn ", defn)
     indextext ||:= " " || defn
   }
   return
 end
-#line 35 "defns.nw"
+#line 70 "defns.nw"
 procedure rcsinfo_too () 
   return "$Id: defns.nw,v 1.18 2008/10/06 01:03:05 nr Exp nr $" ||
          "$Name: v2_12 $"

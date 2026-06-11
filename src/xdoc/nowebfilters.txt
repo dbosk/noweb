@@ -18,7 +18,12 @@ FFIILLTTEERRSS
        aauuttooddeeffss..**
               _n_o_w_e_a_v_e_'_s --aauuttooddeeffss and --sshhoowwaauuttooddeeffss options use these filters,
               which  automatically find defined identifiers.  The ** stands for
-              the name of a programming language.  (Icon installation only.)
+              the name of a programming  language.   When  code  chunks  carry
+              @@llaanngguuaaggee  annotations  (see aauuttoollaanngg below), each of these fil‐
+              ters skips chunks written in languages it does  not  understand,
+              so  a  mixed-language  document no longer collects false defini‐
+              tions from foreign chunks; unannotated chunks are scanned as al‐
+              ways.  (Icon installation only.)
 
        aauuttoollaanngg _m_a_p_p_i_n_g_s
               The aauuttoollaanngg filter annotates every code chunk  with  the  @@llaann‐‐

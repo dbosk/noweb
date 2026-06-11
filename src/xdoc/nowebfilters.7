@@ -27,6 +27,14 @@ options use these filters, which automatically find defined identifiers.
 The 
 .B *
 stands for the name of a programming language.
+When code chunks carry
+.B @language
+annotations (see
+.B autolang
+below), each of these filters skips chunks written in languages it
+does not understand, so a mixed-language document no longer collects
+false definitions from foreign chunks; unannotated chunks are
+scanned as always.
 (Icon installation only.)
 .TP
 .BI autolang " mappings"
