@@ -13,7 +13,7 @@ Use with minted as ``\\begin{minted}{noweb_lexer.py:NowebPythonLexer}``
 """
 
 from pygments.formatters.latex import LatexEmbeddedLexer
-from pygments.lexers import get_lexer_by_name
+from pygments.lexers import get_all_lexers, get_lexer_by_name
 
 ESCAPE_LEFT = "\ue000"
 ESCAPE_RIGHT = "\ue001"
@@ -35,10 +35,20 @@ class NowebEscapeLexer(LatexEmbeddedLexer):
         yield from self._find_escape_tokens(text)
 
 
-LANGUAGES = ("text", "python", "make", "c", "bash", "icon",
-             "sml", "latex")
+def _class_name(alias):
+    """Return the wrapper class name for ``alias``.
 
-for _alias in LANGUAGES:
-    _name = "Noweb" + _alias.capitalize() + "Lexer"
-    globals()[_name] = type(_name, (NowebEscapeLexer,),
-                            {"base_lexer": _alias})
+    Must compute the same name as the tominted filter's
+    ``lexer_class``: non-alphanumeric runs are word breaks and
+    every word is capitalized.
+    """
+    words = "".join(c if c.isalnum() else " " for c in alias).split()
+    return "Noweb" + "".join(w.capitalize() for w in words) + "Lexer"
+
+
+for _, _aliases, _, _ in get_all_lexers():
+    for _alias in _aliases:
+        _name = _class_name(_alias)
+        if _name not in globals():
+            globals()[_name] = type(_name, (NowebEscapeLexer,),
+                                    {"base_lexer": _alias})
