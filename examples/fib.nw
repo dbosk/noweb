@@ -18,11 +18,32 @@ for the program, Make for the build file---while the
 [[autodefs.python3]] filter fills the identifier index at the end of
 this document.
 
-To produce this document, run:
+This document can be woven in three ways from the same source;
+only the filtering varies, and the examples' Makefile has a target
+for each.  The default weave highlights each chunk with minted
+([[make fib.pdf]]):
 \begin{verbatim}
 noweave -delay -autodefs python3 -index -filter tominted fib.nw \
     > fib.tex
 pdflatex -shell-escape fib.tex
+\end{verbatim}
+Weaving with the bundled custom Pygments lexer additionally keeps
+chunk references hyperlinked inside Python strings, such as the
+docstring reference in [[fib]] below ([[make fib-linked.pdf]];
+this needs the one-time latexminted setup described in
+[[README.python]]):
+\begin{verbatim}
+noweave -delay -autodefs python3 -index \
+    -filter 'tominted -lexer noweb_lexer.py' fib.nw \
+    > fib-linked.tex
+pdflatex -shell-escape fib-linked.tex
+\end{verbatim}
+Dropping the [[tominted]] filter altogether gives noweb's classic
+rendering, in which identifier uses inside code are hyperlinked
+too, at the price of no highlighting ([[make fib-xref.pdf]]):
+\begin{verbatim}
+noweave -delay -autodefs python3 -index fib.nw > fib-xref.tex
+pdflatex -shell-escape fib-xref.tex
 \end{verbatim}
 The roots are tangled with the chunk names exactly as they appear,
 brackets included:
@@ -30,7 +51,7 @@ brackets included:
 \texttt{notangle -t8 -R'[{}[Makefile]{}]' fib.nw > Makefile}.
 (The brackets cannot be written verbatim here: noweb would read
 them as a quotation.)  See the accompanying [[README.python]] for
-variations.
+details.
 
 \section{The program}
 
