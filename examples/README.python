@@ -41,6 +41,36 @@ pdflatex -shell-escape fib-xref.tex
 
 The examples' Makefile wires both: `make fib.tex fib-xref.tex`.
 
+## Linked references inside docstrings (optional)
+
+In the plain highlighted PDF, a chunk reference *inside* a Python
+string (like the docstring chunk in fib.nw) is shown as literal
+`<<...>>` text: Pygments' escape mechanism refuses to work inside
+string tokens. The bundled custom lexer lifts that limitation, so
+even the docstring reference is typeset as a linked chunk
+reference:
+
+```bash
+make fib-linked.pdf
+```
+
+This needs one-time setup, because minted treats loading custom
+lexer files as arbitrary code execution. Whitelist the lexer by
+hash in `~/.config/latexminted/.latexminted_config` (or
+`~/.latexminted_config`):
+
+```bash
+mkdir -p ~/.config/latexminted
+printf '{"custom_lexers": {"noweb_lexer.py": "%s"}}\n' \
+    "$(sha256sum noweb_lexer.py | cut -d' ' -f1)" \
+    > ~/.config/latexminted/.latexminted_config
+```
+
+The hash must be updated whenever noweb_lexer.py changes. The
+lexer file itself (tangled from src/lib/tominted.nw and installed
+with noweb) must be readable from the directory where pdflatex
+runs; the Makefile copies it here.
+
 ## Tangling
 
 The chunk names include the brackets, and make needs real tabs, so:

@@ -25,7 +25,7 @@ www: $(HTML)
 
 clean:
 	rm -f *~ *.aux *.tex *.dvi *.log *.html *.toc *.pdf *.idx *.ilg *.ind *.out
-	rm -rf _minted fib
+	rm -rf _minted fib noweb_lexer.py
 
 clobber: clean
 
@@ -52,6 +52,18 @@ fib.pdf: fib.tex
 fib-xref.pdf: fib-xref.tex
 	pdflatex -shell-escape fib-xref.tex
 	pdflatex -shell-escape fib-xref.tex
+# fib-linked.pdf keeps chunk references hyperlinked even inside the
+# docstring, via the custom Pygments lexer.  Requires one-time setup:
+# whitelist noweb_lexer.py by SHA-256 hash in ~/.latexminted_config
+# (see README.python).
+noweb_lexer.py: ../src/lib/noweb_lexer.py
+	cp ../src/lib/noweb_lexer.py $@
+fib-linked.tex: fib.nw
+	$(NOWEAVE) -delay -autodefs python3 -index -filter 'tominted -lexer noweb_lexer.py' fib.nw > $@
+fib-linked.pdf: fib-linked.tex noweb_lexer.py
+	mkdir -p _minted
+	pdflatex -shell-escape fib-linked.tex
+	pdflatex -shell-escape fib-linked.tex
 # The tangled Makefile would clobber this one, so fib tangles into
 # its own subdirectory; -t8 keeps the tabs make needs.
 fib/fib.py: fib.nw

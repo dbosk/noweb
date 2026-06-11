@@ -169,6 +169,23 @@ arguments extend the language tables, each of the form
 .I .ext=lexer
 or
 .IR name=lexer .
+With
+.B \-lexer
+.I path
+references are rendered through the bundled custom Pygments lexer
+(the tangled
+.BR noweb_lexer.py ,
+installed in the noweb library directory), which keeps them
+hyperlinked even inside Python strings.
+.I path
+names the lexer file relative to the directory where LaTeX runs,
+and the file must be whitelisted by SHA-256 hash under
+.B custom_lexers
+in a
+.B .latexminted_config
+file in the user's home directory; see the
+.B minted
+documentation.
 The woven document must load the
 .B minted
 package and be compiled with

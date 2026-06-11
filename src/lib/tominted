@@ -49,6 +49,9 @@ CATCODE_RESET = (
 )
 LIST_SPACING_RESET = "\\partopsep=0pt\\relax"
 ENV_OPTIONS = "xleftmargin=\\codemargin,vspace=0pt"
+CUSTOM_LEXER = None
+ESCAPE_LEFT = "\ue000"
+ESCAPE_RIGHT = "\ue001"
 def lexer_for_chunk(name):
     """Return the Pygments lexer for chunk ``name``, or None.
 
@@ -207,7 +210,7 @@ def rewrite_chunk(chunk, lang, out, start, plain_uses):
                     held.pop()
             relocated.extend(held)
             held = []
-            if start + position in plain_uses:
+            if CUSTOM_LEXER is None and start + position in plain_uses:
                 current_line.append(("text", "<<" + arg + ">>"))
             else:
                 current_line.append(("use", arg, render_use(arg, label)))
@@ -218,7 +221,8 @@ def rewrite_chunk(chunk, lang, out, start, plain_uses):
     if current_line:
         body.append(current_line)
     delimiter = None
-    if any(part[0] == "use" for line in body for part in line):
+    if CUSTOM_LEXER is None and any(
+            part[0] == "use" for line in body for part in line):
         code_text = "".join(part[1] for line in body
                             for part in line if part[0] == "text")
         for candidate in ESCAPE_CANDIDATES:
@@ -229,16 +233,22 @@ def rewrite_chunk(chunk, lang, out, start, plain_uses):
             print("tominted: warning: no usable escape delimiter; "
                   "chunk references will not be linked", file=sys.stderr)
     options = ENV_OPTIONS
-    if delimiter is not None:
-        options += ",escapeinside={" + delimiter + delimiter + "}"
+    if CUSTOM_LEXER is None:
+        lexer = lang
+        if delimiter is not None:
+            options += ",escapeinside={" + delimiter + delimiter + "}"
+    else:
+        lexer = CUSTOM_LEXER + ":" + lexer_class(lang)
     out.append("@literal " + CATCODE_RESET + LIST_SPACING_RESET
-               + "\\begin{minted}[" + options + "]{" + lang + "}")
+               + "\\begin{minted}[" + options + "]{" + lexer + "}")
     out.append("@nl")
     for line in body:
         parts = []
         for part in line:
             if part[0] == "text":
                 parts.append(part[1])
+            elif CUSTOM_LEXER is not None:
+                parts.append(ESCAPE_LEFT + part[2] + ESCAPE_RIGHT)
             elif delimiter is not None:
                 parts.append(delimiter + part[2] + delimiter)
             else:
@@ -249,6 +259,9 @@ def rewrite_chunk(chunk, lang, out, start, plain_uses):
     out.append("@nl")
     out.extend(relocated)
     out.extend(trailer)
+def lexer_class(lang):
+    """Return the noweb_lexer.py class name wrapping ``lang``."""
+    return "Noweb" + lang.capitalize() + "Lexer"
 def rewrite_stream(lines, langs, plain_uses):
     """Return the rewritten markup stream as a list of lines."""
     out = []
@@ -278,7 +291,17 @@ def rewrite_stream(lines, langs, plain_uses):
     return out
 def main():
     """Filter a noweb markup stream from stdin to stdout."""
-    for argument in sys.argv[1:]:
+    global CUSTOM_LEXER
+    arguments = sys.argv[1:]
+    while arguments:
+        argument = arguments.pop(0)
+        if argument == "-lexer":
+            if not arguments:
+                print("tominted: -lexer requires a path",
+                      file=sys.stderr)
+                sys.exit(1)
+            CUSTOM_LEXER = arguments.pop(0)
+            continue
         key, sep, value = argument.partition("=")
         if not sep:
             print("tominted: unknown argument:", argument,

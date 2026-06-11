@@ -78,9 +78,14 @@ The body of the docstring lives in a chunk of its own.  Note how
 [[tominted]] handles it: the filter detects that the reference above
 sits inside the triple-quoted string, so the chunk below is typeset
 as plain text rather than Python---its prose would otherwise sprout
-spuriously highlighted keywords---and the reference itself is shown
-as literal noweb syntax, because a hyperlink cannot survive inside
-what Pygments treats as a single string token.
+spuriously highlighted keywords.  In the default weave the
+reference itself is shown as literal noweb syntax, because
+Pygments' escape mechanism cannot operate inside what it treats as
+a single string token.  Woven with
+[[-filter 'tominted -lexer noweb_lexer.py']] instead (the
+[[fib-linked.pdf]] target; see [[README.python]] for the one-time
+setup), the bundled custom lexer lifts that limitation and the
+reference above is typeset as a normal linked chunk reference.
 
 <<[[fib]] docstring details>>=
 The sequence starts from F(0) = 0 and F(1) = 1; each later number
