@@ -16,7 +16,9 @@ the program and its build file are tangled from the same document.  When woven w
 chunk is syntax-highlighted according to its own language---Python
 for the program, Make for the build file---while the
 [[autodefs.python3]] filter fills the identifier index at the end of
-this document.
+this document.  Section~\ref{sec:other-languages} repeats the
+function in Rust, JavaScript and Haskell, each chunk again
+highlighted by its own lexer.
 
 This document can be woven in three ways from the same source;
 only the filtering varies, and the examples' Makefile has a target
@@ -183,9 +185,104 @@ COUNT=
 Note that [[PYTHON]] and [[COUNT]] appear in the identifier index
 below: [[noweave]] applies [[-autodefs python3]] to every code
 chunk, and make's variable assignments happen to match the Python
-filter's assignment pattern.  In mixed-language documents this is
+filter's assignment pattern.  The Haskell definitions of
+Section~\ref{sec:other-languages} are caught the same way, and the
+Rust and JavaScript [[fib]] functions are indexed as uses of the
+Python definition.  In mixed-language documents this is
 the usual situation---compare [[scanner.nw]] in this directory,
 which combines [[-autodefs c]] and [[-autodefs yacc]].
+
+\section{The same function in other languages}
+\label{sec:other-languages}
+
+[[tominted]] infers each chunk's language separately, so one
+document can showcase the same function across languages.  Each
+implementation below is a self-contained root chunk named like a
+filename---deliberately so: the implementations must not share
+chunks like [[functions]] with the Python program, because noweb
+concatenates same-named chunks and would tangle foreign code into
+[[fib.py]].  The algorithm is the running pair of the Python
+version throughout; only the syntax around it varies---until
+Haskell, where the algorithm itself changes shape.
+
+\subsection{Rust}
+
+Rust spells out what Python's tuple assignment hides: the pair is
+mutable state, so both variables are declared [[mut]].  The update
+itself still mirrors Python, since Rust's destructuring assignment
+evaluates the right-hand side before assigning, exactly like
+Python's tuple swap.
+
+<<[[fib.rs]]>>=
+fn fib(n: usize) -> Vec<u64> {
+    let mut numbers = Vec::new();
+    let (mut a, mut b) = (0u64, 1u64);
+    while numbers.len() < n {
+        numbers.push(a);
+        (a, b) = (b, a + b);
+    }
+    numbers
+}
+
+fn main() {
+    let n = std::env::args().nth(1)
+        .and_then(|arg| arg.parse().ok())
+        .unwrap_or(10);
+    let numbers: Vec<String> =
+        fib(n).iter().map(u64::to_string).collect();
+    println!("{}", numbers.join(" "));
+}
+@
+
+\subsection{JavaScript}
+
+JavaScript's array destructuring gives the same one-line pair
+update.  The count comes from [[process.argv]], whose first two
+elements are the interpreter and the script, so the user's argument
+is element two---the kind of off-by-convention detail a literate
+program gets to explain instead of leaving as a puzzle.
+
+<<[[fib.js]]>>=
+function fib(n) {
+    const numbers = [];
+    let [a, b] = [0, 1];
+    while (numbers.length < n) {
+        numbers.push(a);
+        [a, b] = [b, a + b];
+    }
+    return numbers;
+}
+
+const n = process.argv.length > 2 ? Number(process.argv[2]) : 10;
+console.log(fib(n).join(" "));
+@
+
+\subsection{Haskell}
+
+Haskell is the contrast case: no loop and no mutable pair.
+Laziness lets the sequence be defined in terms of itself---each
+element is the sum of the corresponding elements of the sequence
+and its own tail---and the caller takes as many as needed.  The
+running pair has not disappeared; it is implicit in consuming
+[[fibs]] alongside [[tail fibs]], which is why the definition needs
+the two starting values just like the loops do.
+
+<<[[fib.hs]]>>=
+import System.Environment (getArgs)
+
+fibs :: [Integer]
+fibs = 0 : 1 : zipWith (+) fibs (tail fibs)
+
+main :: IO ()
+main = do
+    args <- getArgs
+    let n = if null args then 10 else read (head args)
+    putStrLn (unwords (map show (take n fibs)))
+@
+
+Like the Python root, each chunk tangles to the file it is named
+after, e.g.\ \texttt{notangle -R'[{}[fib.rs]{}]' fib.nw > fib.rs};
+the Makefile in this document only drives the Python version.
 
 \section{Chunks and identifiers}
 
