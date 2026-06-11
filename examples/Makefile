@@ -42,9 +42,9 @@ dag.tex: dag.nw
 # Both need pdflatex -shell-escape (minted runs Pygments); see
 # README.python.
 fib.tex: fib.nw
-	$(NOWEAVE) -delay -autodefs python3 -index -filter tominted fib.nw > $@
+	$(NOWEAVE) -delay -autolang -autodefs python3 -index -filter tominted fib.nw > $@
 fib-xref.tex: fib.nw
-	$(NOWEAVE) -delay -autodefs python3 -index fib.nw > $@
+	$(NOWEAVE) -delay -autolang -autodefs python3 -index fib.nw > $@
 fib.pdf: fib.tex
 	mkdir -p _minted
 	pdflatex -shell-escape fib.tex
@@ -59,7 +59,7 @@ fib-xref.pdf: fib-xref.tex
 noweb_lexer.py: ../src/lib/noweb_lexer.py
 	cp ../src/lib/noweb_lexer.py $@
 fib-linked.tex: fib.nw
-	$(NOWEAVE) -delay -autodefs python3 -index -filter 'tominted -lexer noweb_lexer.py' fib.nw > $@
+	$(NOWEAVE) -delay -autolang -autodefs python3 -index -filter 'tominted -lexer noweb_lexer.py' fib.nw > $@
 fib-linked.pdf: fib-linked.tex noweb_lexer.py
 	mkdir -p _minted
 	pdflatex -shell-escape fib-linked.tex

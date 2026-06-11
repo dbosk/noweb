@@ -25,8 +25,8 @@ only the filtering varies, and the examples' Makefile has a target
 for each.  The default weave highlights each chunk with minted
 ([[make fib.pdf]]):
 \begin{verbatim}
-noweave -delay -autodefs python3 -index -filter tominted fib.nw \
-    > fib.tex
+noweave -delay -autolang -autodefs python3 -index \
+    -filter tominted fib.nw > fib.tex
 pdflatex -shell-escape fib.tex
 \end{verbatim}
 Weaving with the bundled custom Pygments lexer additionally keeps
@@ -35,7 +35,7 @@ docstring reference in [[fib]] below ([[make fib-linked.pdf]];
 this needs the one-time latexminted setup described in
 [[README.python]]):
 \begin{verbatim}
-noweave -delay -autodefs python3 -index \
+noweave -delay -autolang -autodefs python3 -index \
     -filter 'tominted -lexer noweb_lexer.py' fib.nw \
     > fib-linked.tex
 pdflatex -shell-escape fib-linked.tex
@@ -44,7 +44,8 @@ Dropping the [[tominted]] filter altogether gives noweb's classic
 rendering, in which identifier uses inside code are hyperlinked
 too, at the price of no highlighting ([[make fib-xref.pdf]]):
 \begin{verbatim}
-noweave -delay -autodefs python3 -index fib.nw > fib-xref.tex
+noweave -delay -autolang -autodefs python3 -index \
+    fib.nw > fib-xref.tex
 pdflatex -shell-escape fib-xref.tex
 \end{verbatim}
 The roots are tangled with the chunk names exactly as they appear,
@@ -182,15 +183,19 @@ The count can be overridden from the command line, e.g.\
 COUNT=
 @
 
-Note that [[PYTHON]] and [[COUNT]] appear in the identifier index
-below: [[noweave]] applies [[-autodefs python3]] to every code
-chunk, and make's variable assignments happen to match the Python
-filter's assignment pattern.  The Haskell definitions of
-Section~\ref{sec:other-languages} are caught the same way, and the
-Rust and JavaScript [[fib]] functions are indexed as uses of the
-Python definition.  In mixed-language documents this is
-the usual situation---compare [[scanner.nw]] in this directory,
-which combines [[-autodefs c]] and [[-autodefs yacc]].
+Note what does \emph{not} appear in the identifier index below:
+[[PYTHON]] and [[COUNT]] from this Makefile, and [[fibs]] and
+[[main]] from the Haskell of Section~\ref{sec:other-languages},
+although all four match the Python filter's assignment pattern.
+The document is woven with [[-autolang]], which annotates every
+chunk with its language, and [[-autodefs python3]] skips the
+chunks annotated as make, Rust, JavaScript or Haskell.  Identifier
+\emph{uses} are still found everywhere, so the Rust and JavaScript
+[[fib]] functions are indexed as uses of the Python definition.
+Woven without [[autolang]], the foreign definitions would pollute
+the index---the usual situation in mixed-language documents;
+compare [[scanner.nw]] in this directory, which combines
+[[-autodefs c]] and [[-autodefs yacc]].
 
 \section{The same function in other languages}
 \label{sec:other-languages}

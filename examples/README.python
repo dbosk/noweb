@@ -6,8 +6,11 @@ support.  It defines two root chunks, <<[[fib.py]]>> and
 tangled from the same literate source, and each is woven with its own
 syntax highlighting (Python and Make).
 
-It exercises two pieces of noweb:
+It exercises three pieces of noweb:
 
+- autolang: annotates each chunk with its language (noweave
+  -autolang), so the autodefs filter below skips non-Python chunks
+  and the index stays free of foreign identifiers.
 - autodefs.python3: finds Python definitions automatically, for the
   identifier index and cross-references (noweave -autodefs python3).
 - tominted: typesets each code chunk with the minted LaTeX package,
@@ -24,7 +27,8 @@ It exercises two pieces of noweb:
 Highlighted PDF (definitions index and chunk cross-references):
 
 ```bash
-noweave -delay -autodefs python3 -index -filter tominted fib.nw > fib.tex
+noweave -delay -autolang -autodefs python3 -index -filter tominted \
+    fib.nw > fib.tex
 pdflatex -shell-escape fib.tex
 pdflatex -shell-escape fib.tex
 ```
@@ -34,7 +38,7 @@ code (minted owns the code body in the highlighted version, so use
 links inside code exist only in this mode):
 
 ```bash
-noweave -delay -autodefs python3 -index fib.nw > fib-xref.tex
+noweave -delay -autolang -autodefs python3 -index fib.nw > fib-xref.tex
 pdflatex -shell-escape fib-xref.tex
 pdflatex -shell-escape fib-xref.tex
 ```
