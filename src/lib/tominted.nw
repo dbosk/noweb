@@ -81,16 +81,31 @@ We recognize both bare filenames ([[fib.py]]) and the
 LaTeX-safe quoted convention (the chunk name itself wrapped in noweb's double square
 brackets), which we unwrap before matching.
 
-The tables map either an exact basename or an extension to a Pygments
-lexer name.  They cover the languages noweb ships autodefs filters
-for, plus the common cases; additional mappings can be supplied as
-command-line arguments (Section~\ref{sec:main}).
+The lookup has two levels.  First come two static tables, mapping
+either an exact basename or an extension to a Pygments lexer name;
+additional mappings can be supplied as command-line arguments
+(Section~\ref{sec:main}).  Second, when the tables miss, we ask
+Pygments itself, which knows the filename patterns of every
+language it can highlight (next section).
+
+Why keep tables at all, when Pygments already knows the answer?
+Because Pygments need not be installed where \emph{this filter}
+runs: the filter runs in the noweave pipeline, while Pygments is
+only guaranteed wherever the woven document is later compiled, and
+those can be different machines.  The tables keep the popular
+languages working with no dependencies beyond Python itself.  They
+also pin \emph{which} lexer alias we use where Pygments offers a
+choice (e.g.\ [[perl]] rather than [[prolog]] for [[.pl]]), and
+they are what the command-line mappings extend, so a user override
+always beats Pygments' opinion.
 
 <<constants>>=
 LEXERS_BY_NAME = {
     "Makefile": "make",
     "makefile": "make",
     "GNUmakefile": "make",
+    "Dockerfile": "docker",
+    "CMakeLists.txt": "cmake",
 }
 LEXERS_BY_EXT = {
     ".py": "python",
@@ -100,14 +115,59 @@ LEXERS_BY_EXT = {
     ".h": "c",
     ".icn": "icon",
     ".sh": "bash",
+    ".bash": "bash",
+    ".zsh": "bash",
     ".sml": "sml",
     ".tex": "latex",
+    ".js": "javascript",
+    ".mjs": "javascript",
+    ".ts": "typescript",
+    ".java": "java",
+    ".cpp": "cpp",
+    ".cc": "cpp",
+    ".cxx": "cpp",
+    ".hpp": "cpp",
+    ".hh": "cpp",
+    ".cs": "csharp",
+    ".go": "go",
+    ".rs": "rust",
+    ".rb": "ruby",
+    ".php": "php",
+    ".swift": "swift",
+    ".kt": "kotlin",
+    ".kts": "kotlin",
+    ".scala": "scala",
+    ".hs": "haskell",
+    ".ml": "ocaml",
+    ".mli": "ocaml",
+    ".lua": "lua",
+    ".pl": "perl",
+    ".pm": "perl",
+    ".r": "r",
+    ".R": "r",
+    ".jl": "julia",
+    ".sql": "sql",
+    ".html": "html",
+    ".css": "css",
+    ".json": "json",
+    ".yml": "yaml",
+    ".yaml": "yaml",
+    ".toml": "toml",
+    ".md": "markdown",
+    ".zig": "zig",
+    ".dart": "dart",
+    ".ex": "elixir",
+    ".exs": "elixir",
+    ".erl": "erlang",
+    ".f90": "fortran",
+    ".f95": "fortran",
 }
 @
 
 The quoting convention is unwrapped, then the basename is looked up,
-first verbatim and then by extension.  Returning [[None]] means
-``no idea'', which pass~1 may still resolve by inheritance.
+first verbatim, then by extension, and finally against Pygments'
+own filename patterns.  Returning [[None]] means ``no idea'', which
+pass~1 may still resolve by inheritance.
 
 <<functions>>=
 def lexer_for_chunk(name):
@@ -115,6 +175,8 @@ def lexer_for_chunk(name):
 
     The chunk name may use noweb's ``[[...]]`` quoting and may
     contain directory separators; only the basename decides.
+    Names the built-in tables do not cover are matched against
+    Pygments' filename patterns when Pygments is installed.
     """
     if name.startswith("[[") and name.endswith("]]"):
         name = name[2:-2]
@@ -122,9 +184,56 @@ def lexer_for_chunk(name):
     if basename in LEXERS_BY_NAME:
         return LEXERS_BY_NAME[basename]
     dot = basename.rfind(".")
-    if dot >= 0:
-        return LEXERS_BY_EXT.get(basename[dot:])
-    return None
+    if dot >= 0 and basename[dot:] in LEXERS_BY_EXT:
+        return LEXERS_BY_EXT[basename[dot:]]
+    return pygments_lexer_for_chunk(basename)
+@
+
+\subsection{Falling back on Pygments}
+\label{sec:pygments}
+
+Any language the tables miss can still be highlighted, provided
+Pygments is importable where the filter runs.  Pygments maintains
+exactly the mapping we need---filename patterns to lexers---for
+every language it supports, and since Pygments is what eventually
+does the highlighting, a lexer found this way is highlightable by
+construction.  The import is guarded: when Pygments is absent, the
+fallback silently reports no match and unknown languages keep
+noweb's classic rendering, which is the same graceful degradation
+the rest of the filter already practices.
+
+<<constants>>=
+try:
+    from pygments.lexers import find_lexer_class_for_filename
+except ImportError:
+    find_lexer_class_for_filename = None
+@
+
+Of a found lexer we keep the \emph{first} alias.  Any alias would
+select the same lexer, but the class names generated for the custom
+lexer of Section~\ref{sec:lexer} are derived from the alias, so a
+canonical choice keeps one wrapper class per language.
+
+Each match scans Pygments' full pattern list and may import lexer
+modules, so the result is memoized per basename.  The cache also
+stores misses: the names that recur most---ordinary chunk names
+like [[functions]], looked up once per use edge during
+propagation---are exactly the ones that match nothing.
+
+<<constants>>=
+PYGMENTS_ALIASES = {}
+@
+
+<<functions>>=
+def pygments_lexer_for_chunk(basename):
+    """Return the alias of Pygments' lexer for ``basename``, or None."""
+    if find_lexer_class_for_filename is None:
+        return None
+    if basename not in PYGMENTS_ALIASES:
+        cls = find_lexer_class_for_filename(basename)
+        PYGMENTS_ALIASES[basename] = (
+            cls.aliases[0] if cls is not None and cls.aliases else None)
+    return PYGMENTS_ALIASES[basename]
 @
 
 \subsection{Reading the markup stream}
@@ -294,6 +403,12 @@ distinguish [[''']] from [["""]] when pairing delimiters.  Every
 failure mode merely degrades to the behaviour without the
 heuristic, and the common literate pattern---docstring delimiters
 on their own lines around the use---is handled correctly.  The
+heuristic is also Python-only: a chunk use inside a string literal
+of another language goes undetected, so its escaped link macros can
+leak into the typeset string just as described above.  Tracking
+every language's string syntax is not worth the complexity when the
+custom lexer of Section~\ref{sec:lexer} sidesteps the problem in
+all languages at once.  The
 conflict rule composes naturally: a chunk used both inside a
 docstring and as real code inherits [[text]] and a code lexer,
 conflicts, and falls back to noweb's classic rendering.
@@ -645,9 +760,23 @@ by a loop rather than written out, but they must exist eagerly in
 the module namespace: [[latexminted]] runs the file with [[exec]]
 and looks the class name up in the resulting dictionary, so a
 module-level [[__getattr__]] (PEP~562) that creates classes on
-demand is never consulted.  The generated classes cover every
-language in the filter's built-in tables; to highlight references
-in further languages, add the Pygments alias to [[LANGUAGES]].
+demand is never consulted.  The loop covers every alias of every
+lexer Pygments installs, so the wrapper classes can never lag
+behind the filter's tables or its Pygments fallback
+(Section~\ref{sec:pygments}); the classes are cheap because
+[[type()]] does not import the wrapped lexer's module---that
+happens only when minted instantiates a class.
+
+A class name is the alias with every run of non-alphanumeric
+characters treated as a word break, each word capitalized:
+[[emacs-lisp]] becomes [[NowebEmacsLispLexer]].  The sanitization
+must agree with [[lexer_class]] on the filter side, which computes
+the same name when writing the minted environments.  Sanitized
+names can collide, but only between aliases that differ solely in
+non-alphanumeric characters ([[c++]] also maps to [[NowebCLexer]]);
+the first alias encountered keeps the name.  The filter stays clear
+of such collisions because its tables and its fallback pick
+plain-word aliases like [[cpp]], which sanitize to themselves.
 
 <<[[noweb_lexer.py]]>>=
 """Pygments lexers that render noweb chunk references everywhere.
@@ -665,7 +794,7 @@ Use with minted as ``\\begin{minted}{noweb_lexer.py:NowebPythonLexer}``
 """
 
 from pygments.formatters.latex import LatexEmbeddedLexer
-from pygments.lexers import get_lexer_by_name
+from pygments.lexers import get_all_lexers, get_lexer_by_name
 
 ESCAPE_LEFT = "\ue000"
 ESCAPE_RIGHT = "\ue001"
@@ -687,13 +816,23 @@ class NowebEscapeLexer(LatexEmbeddedLexer):
         yield from self._find_escape_tokens(text)
 
 
-LANGUAGES = ("text", "python", "make", "c", "bash", "icon",
-             "sml", "latex")
+def _class_name(alias):
+    """Return the wrapper class name for ``alias``.
 
-for _alias in LANGUAGES:
-    _name = "Noweb" + _alias.capitalize() + "Lexer"
-    globals()[_name] = type(_name, (NowebEscapeLexer,),
-                            {"base_lexer": _alias})
+    Must compute the same name as the tominted filter's
+    ``lexer_class``: non-alphanumeric runs are word breaks and
+    every word is capitalized.
+    """
+    words = "".join(c if c.isalnum() else " " for c in alias).split()
+    return "Noweb" + "".join(w.capitalize() for w in words) + "Lexer"
+
+
+for _, _aliases, _, _ in get_all_lexers():
+    for _alias in _aliases:
+        _name = _class_name(_alias)
+        if _name not in globals():
+            globals()[_name] = type(_name, (NowebEscapeLexer,),
+                                    {"base_lexer": _alias})
 @
 
 On the filter side, the custom lexer is enabled with
@@ -714,8 +853,13 @@ ESCAPE_RIGHT = "\ue001"
 
 <<functions>>=
 def lexer_class(lang):
-    """Return the noweb_lexer.py class name wrapping ``lang``."""
-    return "Noweb" + lang.capitalize() + "Lexer"
+    """Return the noweb_lexer.py class name wrapping ``lang``.
+
+    Mirrors ``_class_name`` in noweb_lexer.py: non-alphanumeric
+    runs are word breaks and every word is capitalized.
+    """
+    words = "".join(c if c.isalnum() else " " for c in lang).split()
+    return "Noweb" + "".join(w.capitalize() for w in words) + "Lexer"
 @
 
 Minted treats loading custom lexer files as arbitrary code

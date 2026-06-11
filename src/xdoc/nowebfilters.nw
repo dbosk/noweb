@@ -156,6 +156,10 @@ or
 .BR Makefile )
 and is inherited through chunk uses otherwise; chunks of unknown
 language keep the standard rendering.
+Built-in tables cover the popular languages; filenames they miss are
+matched against Pygments' own filename patterns when Pygments is
+importable where the filter runs, so any language Pygments can
+highlight is recognized.
 Chunk references inside highlighted code remain hyperlinked,
 except inside Python string literals, where a reference is shown
 as plain noweb syntax and the referenced chunk is typeset as
