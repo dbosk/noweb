@@ -90,6 +90,7 @@ definitions.
 global showlocal
 procedure main(args)
   showlocal := !args == "-local"
+  defnslanguages := set(["python", "python3"])
   go()
 end
 @
@@ -97,6 +98,15 @@ end
 The main entry point processes command-line arguments.  The [[-local]]
 flag enables extraction of methods and nested functions.  The [[go]]
 procedure is provided by [[defns.nw]].
+
+Declaring [[defnslanguages]] makes [[go]] withhold the text of
+chunks annotated (with the [[@language]] keyword, by an upstream
+filter such as [[autolang]]) as some other language: a Makefile
+variable or a Haskell binding matches the assignment pattern below
+just as well as a Python constant does, and skipping foreign chunks
+is the only way to tell them apart.  Chunks without an annotation
+are still scanned, so nothing changes for documents woven without
+[[autolang]].
 
 \subsection{The postpass procedure}
 

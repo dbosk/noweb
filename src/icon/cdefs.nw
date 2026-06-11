@@ -3,6 +3,7 @@
 global decls_ok
 procedure main(args)
   decls_ok := !args == "-decl"
+  defnslanguages := set(["c", "cpp", "c++"])
   go()
 end
 <<*>>=
