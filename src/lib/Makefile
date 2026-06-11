@@ -7,25 +7,25 @@ CINAME=
 CIMSG=
 RCSFILES=emptydefn toascii.nw tominted.nw unmarkup Makefile nwmtime pipedocs h2a btdefn
 
-all: toascii tominted
+all: toascii tominted noweb_lexer.py
 	chmod +x unmarkup emptydefn nwmtime pipedocs h2a btdefn
 
 install: all
-	cp unmarkup emptydefn toascii tominted nwmtime btdefn $(LIB)
+	cp unmarkup emptydefn toascii tominted noweb_lexer.py nwmtime btdefn $(LIB)
 	for i in pipedocs h2a; do \
 	  sed "s@|LIBDIR|@$(LIB)@g" $$i > $(LIB)/$$i && chmod +x $(LIB)/$$i; \
 	done
 
 uninstall:
-	for i in unmarkup emptydefn toascii tominted nwmtime pipedocs h2a btdefn; do \
+	for i in unmarkup emptydefn toascii tominted noweb_lexer.py nwmtime pipedocs h2a btdefn; do \
 	  rm -f $(LIB)/$$i; \
 	done
 
-source: toascii tominted
-touch: toascii tominted
-	touch toascii tominted
+source: toascii tominted noweb_lexer.py
+touch: toascii tominted noweb_lexer.py
+	touch toascii tominted noweb_lexer.py
 boot:
-	touch toascii tominted
+	touch toascii tominted noweb_lexer.py
 
 toascii: toascii.nw
 	notangle -R$@ toascii.nw > $@
@@ -35,7 +35,10 @@ tominted: tominted.nw
 	notangle -R$@ tominted.nw > $@
 	chmod +x $@
 
+noweb_lexer.py: tominted.nw
+	notangle -R'[[noweb_lexer.py]]' tominted.nw > $@
+
 clean:
 	rm -f *.log *.blg *.dvi *.toc *.aux *.tex *~
 clobber: clean
-	rm -f toascii tominted
+	rm -f toascii tominted noweb_lexer.py
