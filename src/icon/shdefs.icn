@@ -1,0 +1,136 @@
+#line 61 "shdefs.nw"
+procedure main(args)
+  defnslanguages := set(["sh", "bash", "shell", "zsh", "ksh", "dash"])
+  go()
+end
+#line 83 "shdefs.nw"
+procedure postpass(name, arg)
+  static kind
+  initial kind := "bogus"
+  case name of {
+    "begin" : arg ? kind := tab(upto(' ')|0)
+    "text" : if kind == "code" then {
+      
+#line 113 "shdefs.nw"
+arg ? {
+  if /arg | *arg = 0 then return
+  toplevel := if any(' \t') then &null else 1
+  tab(many(' \t'))
+  if any('#') then return
+
+  if (="function", any(' \t')) then {
+    tab(many(' \t'))
+    if ident := sh_ident() then
+      return writedefn(ident)
+  }
+  if \toplevel then {
+    
+#line 151 "shdefs.nw"
+if (=("export"|"readonly"|"declare"|"typeset"|"alias"), any(' \t')) then {
+  tab(many(' \t'))
+  while any('-') do {
+    tab(upto(' \t') | 0)
+    tab(many(' \t'))
+  }
+}
+#line 126 "shdefs.nw"
+  }
+  if ident := sh_ident() then {
+    if (="+" | "") & ="=" & not any('=') then {
+      if \toplevel then return writedefn(ident)
+    }
+    else {
+      tab(many(' \t'))
+      if (="(", optwhite(), =")") then
+        return writedefn(ident)
+    }
+  }
+}
+#line 90 "shdefs.nw"
+    }
+  }
+  return
+end
+#line 168 "shdefs.nw"
+procedure sh_ident()
+  static alpha, alnum
+  initial {
+    alpha := &letters ++ '_'
+    alnum := alpha ++ &digits
+  }
+  if any(alpha) then
+    return tab(many(alnum))
+  else
+    fail
+end
+
+procedure optwhite()
+  suspend tab(many(' \t')) | ""
+end
+#line 188 "shdefs.nw"
+procedure prepass(name, arg)
+  if name == "end" then writedefn(&null) # force newline flush
+  return
+end
+
+procedure rcsinfo ()
+  return "$Id: shdefs.nw,v 1.1 2026/06/12 00:00:00 dbosk Exp $"
+end
+#line 14 "defns.nw"
+global defnslanguages
+
+procedure go()
+  local line, chunklang
+  while line := read() do {
+    
+#line 42 "defns.nw"
+line ? if ="@begin " then chunklang := &null
+       else if ="@language " then chunklang := tab(0)
+#line 20 "defns.nw"
+    if 
+#line 47 "defns.nw"
+(match("@text ", line) & \defnslanguages & \chunklang &
+ not member(defnslanguages, chunklang))
+#line 20 "defns.nw"
+                                                       then
+      write(line)
+    else {
+      apply(prepass, line)
+      write(line)
+      if match("@fatal ", line) then exit(1)
+      apply(postpass, line)
+    }
+  }
+end
+
+procedure apply(pass, line)
+    line ? (="@" & pass(tab(upto(' ')|0),  if =" " then tab(0) else &null))
+end
+#line 53 "defns.nw"
+procedure writedefn(defn, locl)
+  static indextext
+  initial indextext := ""
+  if /defn then
+    *indextext > 0 & 
+#line 66 "defns.nw"
+{ # write("@index nl")		# don't!
+  indextext := ""
+}
+#line 58 "defns.nw"
+  else {
+    if *indextext + *defn > 65 then 
+#line 66 "defns.nw"
+{ # write("@index nl")		# don't!
+  indextext := ""
+}
+#line 60 "defns.nw"
+    write(if \locl then "@index localdefn " else "@index defn ", defn)
+    indextext ||:= " " || defn
+  }
+  return
+end
+#line 70 "defns.nw"
+procedure rcsinfo_too () 
+  return "$Id: defns.nw,v 1.18 2008/10/06 01:03:05 nr Exp nr $" ||
+         "$Name: v2_12 $"
+end
