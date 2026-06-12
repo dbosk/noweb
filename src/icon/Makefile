@@ -9,6 +9,7 @@ LIBEXECS=totex disambiguate noidx tohtml elide l2h docs2comments \
 	autodefs.tex autodefs.icon autodefs.yacc autodefs.sml autodefs.pascal \
 	autodefs.promela autodefs.lrtl autodefs.asdl autodefs.mmix autodefs.python3 \
 	autodefs.sh autodefs.make autodefs.haskell autodefs.rust autodefs.java \
+	autodefs.cpp \
 	xchunks pipedocs
 LIBSPECIAL=autodefs.cee
 BINEXECS=noindex sl2h htmltoc
@@ -18,7 +19,7 @@ SRCS=totex.icn disambiguate.icn noidx.icn texdefs.icn icondefs.icn \
 	l2h.icn sl2h.icn pascaldefs.icn promeladefs.icn lrtldefs.icn asdldefs.icn \
 	mmixdefs.icn htmltoc.icn xchunks.icn docs2comments.icn pipedocs.icn \
 	pdcached.icn python3defs.icn shdefs.icn makedefs.icn haskelldefs.icn \
-	rustdefs.icn javadefs.icn
+	rustdefs.icn javadefs.icn cppdefs.icn
 
 .SUFFIXES: .nw .icn .html .tex .dvi
 .nw.icn:
@@ -91,6 +92,8 @@ rustdefs.icn: rustdefs.nw defns.nw
 	notangle -L'#line %-1L "%F"%N' rustdefs.nw defns.nw $(CPIF) $@
 javadefs.icn: javadefs.nw defns.nw
 	notangle -L'#line %-1L "%F"%N' javadefs.nw defns.nw $(CPIF) $@
+cppdefs.icn: cppdefs.nw defns.nw
+	notangle -L'#line %-1L "%F"%N' cppdefs.nw defns.nw $(CPIF) $@
 
 autodefs.tex: texdefs.icn
 	$(ICONT) -o $@ texdefs.icn
@@ -139,6 +142,9 @@ autodefs.rust: rustdefs.icn
 
 autodefs.java: javadefs.icn
 	$(ICONT) -o $@ javadefs.icn
+
+autodefs.cpp: cppdefs.icn
+	$(ICONT) -o $@ cppdefs.icn
 
 totex: totex.icn
 	$(ICONC) totex.icn
