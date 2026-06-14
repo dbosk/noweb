@@ -473,7 +473,7 @@ vmode; if it does start a new one, it's only indented by the use of
 \let\nwdocspar=\filbreak
 @ 
 Some people don't like it that noweb leaves so much white space.
-The secret, undocument style option [[breakcode]] will break up code
+The [[breakcode]] option will break up code
 in order to use less white space.
 The parameter [[\nwbreakcodespace]] controls how much white space to
 leave.
@@ -486,6 +486,17 @@ leave.
   \def\nwendcode{\endtrivlist\endgroup} % ditches filbreak
 }
 @ 
+\iffalse
+<<man page: [[\noweboptions]]>>=
+.TP
+.B breakcode
+Make 
+.I noweb
+use less vertical white space, at the cost of breaking up code chunks.
+White space left on a page is at most
+.B "\\\\nwbreakcodespace."
+@ \fi
+
 The page-breaking strategy implies ragged bottom pages, so we should
 turn it on in general (this is relevant for the \texttt{report} style):
 <<noweb.sty>>=
@@ -1634,13 +1645,13 @@ Johann ``Myrkraverk'' Oskarsson" \verb+<johann@myrkraverk.com>+.
   \def\@nwlangdepcud{This code is used}%
   \def\@nwlangdeprtc{Root chunk (not used in this document)}%
   \def\@nwlangdepcwf{This code is written to file}%
-  \def\@nwlangdepchk{kóða}%
-  \def\@nwlangdepchks{kóðum}%
-  \def\@nwlangdepin{í}%
+  \def\@nwlangdepchk{k\'{o}\dh a}%
+  \def\@nwlangdepchks{k\'{o}\dh um}%
+  \def\@nwlangdepin{\'{\i}}%
   \def\@nwlangdepand{og}%
   \def\@nwlangdepuss{Notar}%
-  \def\@nwlangdepusd{notað}%
-  \def\@nwlangdepnvu{hvergi notað}%
+  \def\@nwlangdepusd{nota\dh}%
+  \def\@nwlangdepnvu{hvergi nota\dh}%
   \def\@nwlangdepdfs{Skilgreinir}%
   \def\@nwlangdepnvd{hvergi skilgreint}%
 }
@@ -1849,19 +1860,19 @@ Hence:
 This is a translation to Swedish by Daniel Bosk \verb+<daniel@bosk.se>+.
 <<language support>>=
 \def\nwopt@swedish{%
-  \def\@nwlangdepdef{Denna definition fortsÃ¤tter}%
-  \def\@nwlangdepcud{Denna kod anvÃ¤nds}%
+  \def\@nwlangdepdef{Denna definition forts\"{a}tter}%
+  \def\@nwlangdepcud{Denna kod anv\"{a}nds}%
   \def\@nwlangdeprtc{%
-    Rotstycke (anvÃ¤nds inte nÃ¥gon annanstans i detta dokument)%
+    Rotstycke (anv\"{a}nds inte n\r{a}gon annanstans i detta dokument)%
   }%
   \def\@nwlangdepcwf{Denna kod skrivs till fil}%
   \def\@nwlangdepchk{stycke}%
   \def\@nwlangdepchks{stycken}%
   \def\@nwlangdepin{i}%
   \def\@nwlangdepand{och}%
-  \def\@nwlangdepuss{AnvÃ¤nder}%
-  \def\@nwlangdepusd{anvÃ¤nd}%
-  \def\@nwlangdepnvu{aldrig anvÃ¤nd}%
+  \def\@nwlangdepuss{Anv\"{a}nder}%
+  \def\@nwlangdepusd{anv\"{a}nd}%
+  \def\@nwlangdepnvu{aldrig anv\"{a}nd}%
   \def\@nwlangdepdfs{Definierar}%
   \def\@nwlangdepnvd{inte definierad}%
 }
