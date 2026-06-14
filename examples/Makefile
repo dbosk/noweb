@@ -24,7 +24,8 @@ www: $(HTML)
 	copy -v README.h $(WWW)/index.html
 
 clean:
-	rm -f *~ *.aux *.tex *.dvi *.log *.html *.toc
+	rm -f *~ *.aux *.tex *.dvi *.log *.html *.toc *.pdf *.idx *.ilg *.ind *.out
+	rm -rf _minted fib multilang noweb_lexer.py
 
 clobber: clean
 
@@ -36,6 +37,72 @@ dag.html: dag.nw
 	$(NOWEAVE) -filter l2h -index -autodefs icon -html dag.nw > $@
 dag.tex: dag.nw
 	$(NOWEAVE) -index -autodefs icon dag.nw > $@
+# fib.tex is highlighted with minted; fib-xref.tex is the classic
+# rendering, in which identifier uses inside code are hyperlinked.
+# Both need pdflatex -shell-escape (minted runs Pygments); see
+# README.python.
+fib.tex: fib.nw
+	$(NOWEAVE) -delay -autolang -autodefs python3 -index -filter tominted fib.nw > $@
+fib-xref.tex: fib.nw
+	$(NOWEAVE) -delay -autolang -autodefs python3 -index fib.nw > $@
+fib.pdf: fib.tex
+	mkdir -p _minted
+	pdflatex -shell-escape fib.tex
+	pdflatex -shell-escape fib.tex
+fib-xref.pdf: fib-xref.tex
+	pdflatex -shell-escape fib-xref.tex
+	pdflatex -shell-escape fib-xref.tex
+# fib-linked.pdf keeps chunk references hyperlinked even inside the
+# docstring, via the custom Pygments lexer.  Requires one-time setup:
+# whitelist noweb_lexer.py by SHA-256 hash in ~/.latexminted_config
+# (see README.python).
+noweb_lexer.py: ../src/lib/noweb_lexer.py
+	cp ../src/lib/noweb_lexer.py $@
+fib-linked.tex: fib.nw
+	$(NOWEAVE) -delay -autolang -autodefs python3 -index -filter 'tominted -lexer noweb_lexer.py' fib.nw > $@
+fib-linked.pdf: fib-linked.tex noweb_lexer.py
+	mkdir -p _minted
+	pdflatex -shell-escape fib-linked.tex
+	pdflatex -shell-escape fib-linked.tex
+# The tangled Makefile would clobber this one, so fib tangles into
+# its own subdirectory; -t8 keeps the tabs make needs.
+fib/fib.py: fib.nw
+	mkdir -p fib
+	notangle -R'[[fib.py]]' fib.nw > $@
+fib/Makefile: fib.nw
+	mkdir -p fib
+	notangle -t8 -R'[[Makefile]]' fib.nw > $@
+fib-run: fib/fib.py fib/Makefile
+	$(MAKE) -C fib test
+	$(MAKE) -C fib run
+# multilang.nw exercises all six new -autodefs filters (cpp, rust,
+# haskell, java, sh, make).  They do not fit one weave: -index uses
+# two of noweave's seven filter slots, -autolang one and tominted
+# one, leaving three -autodefs for a highlighted weave and four for a
+# classic one.  So multilang.pdf highlights everything and indexes
+# cpp/sh/make, while multilang-defs.pdf classically indexes the rest.
+# See multilang.nw's introduction.
+multilang.tex: multilang.nw
+	$(NOWEAVE) -delay -autolang -autodefs cpp -autodefs sh -autodefs make -index -filter 'tominted -lexer noweb_lexer.py' multilang.nw > $@
+multilang.pdf: multilang.tex noweb_lexer.py
+	mkdir -p _minted
+	pdflatex -shell-escape multilang.tex
+	pdflatex -shell-escape multilang.tex
+multilang-defs.tex: multilang.nw
+	$(NOWEAVE) -delay -autolang -autodefs rust -autodefs haskell -autodefs java -index multilang.nw > $@
+multilang-defs.pdf: multilang-defs.tex
+	pdflatex multilang-defs.tex
+	pdflatex multilang-defs.tex
+# Tangle every implementation into its own subdirectory (the tangled
+# Makefile would otherwise clobber this one); -t8 keeps make's tabs.
+multilang-tangle: multilang.nw
+	mkdir -p multilang
+	notangle -R'[[gcd.cpp]]'  multilang.nw > multilang/gcd.cpp
+	notangle -R'[[gcd.rs]]'   multilang.nw > multilang/gcd.rs
+	notangle -R'[[Gcd.hs]]'   multilang.nw > multilang/Gcd.hs
+	notangle -R'[[Gcd.java]]' multilang.nw > multilang/Gcd.java
+	notangle -R'[[gcd.sh]]'   multilang.nw > multilang/gcd.sh
+	notangle -t8 -R'[[Makefile]]' multilang.nw > multilang/Makefile
 mipscoder.html: mipscoder.nw
 	$(NOWEAVE) -filter l2h -index -autodefs sml -html mipscoder.nw > $@
 mipscoder.tex: mipscoder.nw
