@@ -237,6 +237,17 @@ The woven document must load the
 .B minted
 package and be compiled with
 .BR "pdflatex \-shell\-escape" .
+The
+.B noweb
+package can load
+.B minted
+for you: write
+.B "\(rsusepackage[minted]{noweb}"
+when you supply your own preamble, or pass
+.B "noweave \-option minted"
+when
+.I noweave
+generates the preamble.
 LaTeX only; do not combine with
 .BR \-html .
 .TP

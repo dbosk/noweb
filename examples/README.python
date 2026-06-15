@@ -22,6 +22,14 @@ It exercises three pieces of noweb:
 - Python 3 and Pygments (for tominted/minted)
 - LaTeX with the minted package; compile with pdflatex -shell-escape
 
+fib.nw loads minted through the noweb package, with
+`\usepackage[minted]{noweb}` in its preamble, so there is no separate
+`\usepackage{minted}` line to remember.  When noweb generates the
+preamble instead (a weave without `-delay`), pass `noweave -option
+minted` to get the same effect.  The `-minted` shorthand bundles that
+option with `-filter tominted`, so `noweave ... -index -minted fib.nw`
+is enough for a highlighted weave.
+
 ## Building
 
 Highlighted PDF (definitions index and chunk cross-references):

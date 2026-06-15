@@ -1,6 +1,5 @@
 \documentclass{article}
-\usepackage{noweb}
-\usepackage{minted}
+\usepackage[minted]{noweb}
 \pagestyle{noweb}
 \title{Fibonacci numbers:\\
   a literate Python program with its own Makefile}
