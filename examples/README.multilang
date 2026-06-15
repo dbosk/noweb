@@ -41,7 +41,10 @@ Between them the two builds exercise all six scanners.
   autolang/tominted filters
 - Python 3 and Pygments (for tominted/minted, the highlighted build)
 - LaTeX with the minted package; compile the highlighted build with
-  pdflatex -shell-escape
+  pdflatex -shell-escape.  multilang.nw loads minted through the noweb
+  package (`\usepackage[minted]{noweb}`), so no separate
+  `\usepackage{minted}` line is needed; for a noweb-generated preamble
+  pass `noweave -option minted` instead
 - to *run* the tangled programs: a C++ compiler and /bin/sh are
   enough; rustc, ghc and javac only if you want to build those
   versions too

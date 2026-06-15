@@ -1,6 +1,5 @@
 \documentclass{article}
-\usepackage{noweb}
-\usepackage{minted}
+\usepackage[minted]{noweb}
 \pagestyle{noweb}
 \title{Greatest common divisor:\\
   one function, six languages, one stacked index}
