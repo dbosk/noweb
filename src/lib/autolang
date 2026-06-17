@@ -3,10 +3,12 @@
 
 Reads a noweb markup stream on stdin and writes it to stdout,
 adding an ``@language`` line to every code chunk whose language
-can be determined from filename-like chunk names, transitively
-through chunk uses.  Run it as the first filter, before any
-filter that consumes language information (e.g. the autodefs
-filters).  See nowebfilters(7).
+can be determined---from filename-like chunk names, shebang
+lines, and the lexical context each chunk is used in (heredoc
+bodies, interpreter ``-c`` arguments, make recipes), propagated
+transitively through chunk uses.  Run it as the first filter,
+before any filter that consumes language information (e.g. the
+autodefs filters).  See nowebfilters(7).
 """
 
 import sys
@@ -86,6 +88,27 @@ LANGUAGE_SYNONYMS = {
 }
 PYTHON_LEXERS = {"python", "python3", "py", "py3"}
 STRING_DELIMITERS = ('"""', "'''")
+import re
+
+INTERPRETERS = {
+    "python": "python", "python3": "python", "python2": "python",
+    "sh": "bash", "bash": "bash", "dash": "bash", "ksh": "bash",
+    "zsh": "bash", "perl": "perl", "ruby": "ruby",
+    "node": "javascript", "nodejs": "javascript",
+    "awk": "awk", "gawk": "awk", "sed": "sed", "lua": "lua",
+    "php": "php", "Rscript": "r", "psql": "sql", "mysql": "sql",
+    "sqlite3": "sql",
+}
+HEREDOC_RE = re.compile(r'<{2}[-~]?\s*(["\'\\]?)([A-Za-z_]\w*)\1\s*$')
+ASSIGNMENT_RE = re.compile(r'\w+=')
+DELIMITER_TAGS = {
+    "py": "python", "python": "python", "python3": "python",
+    "sh": "bash", "bash": "bash", "sql": "sql",
+    "js": "javascript", "node": "javascript",
+    "rb": "ruby", "ruby": "ruby", "pl": "perl", "perl": "perl",
+    "lua": "lua", "php": "php", "awk": "awk", "sed": "sed", "r": "r",
+}
+INLINE_CODE_RE = re.compile(r'(\S+)\s+-[ce]\s+["\']?\s*$')
 def lexer_for_chunk(name):
     """Return the Pygments lexer for chunk ``name``, or None.
 
@@ -126,7 +149,9 @@ def chunk_languages(lines):
 
     Returns a pair ``(langs, plain_uses)``.  ``langs`` maps chunk
     names to Pygments lexer names: languages are seeded from
-    ``@language`` annotations and filename-like chunk names, and
+    ``@language`` annotations, filename-like chunk names, shebang
+    lines, and the lexical context each chunk is used in (heredoc
+    bodies, interpreter ``-c`` arguments, make recipes), then
     propagated to the chunks they use, transitively; chunks with
     conflicting inherited languages are omitted.  ``plain_uses``
     is the set of indices into ``lines`` of the ``@use`` lines
@@ -140,6 +165,8 @@ def chunk_languages(lines):
     current = None
     in_code = False
     in_string = {}
+    previous_line = line_so_far = ""
+    shebang_checked = set()
     for index, line in enumerate(lines):
         keyword, arg = parse(line)
         if keyword == "begin" and arg.startswith("code"):
@@ -152,6 +179,7 @@ def chunk_languages(lines):
             current = arg
             uses.setdefault(current, set())
             in_string.setdefault(current, False)
+            previous_line = line_so_far = ""
             if current not in explicit:
                 lexer = lexer_for_chunk(current)
                 if lexer is not None:
@@ -163,9 +191,25 @@ def chunk_languages(lines):
             flips = sum((arg or "").count(d) for d in STRING_DELIMITERS)
             if flips % 2:
                 in_string[current] = not in_string[current]
+            if current not in shebang_checked:
+                shebang_checked.add(current)
+                if current not in explicit and lexer_for_chunk(current) is None:
+                    shebang = shebang_language(arg or "")
+                    if shebang is not None:
+                        langs[current] = shebang
+                        explicit.add(current)
+            line_so_far += arg or ""
         elif in_code and keyword == "use" and current is not None:
             uses[current].add((arg, in_string[current]))
             edges.append((current, arg, in_string[current], index))
+            context = context_language(line_so_far, previous_line,
+                                       langs.get(current))
+            if context is not None and arg not in explicit \
+                    and lexer_for_chunk(arg) is None:
+                langs[arg] = context
+                explicit.add(arg)
+        elif in_code and keyword == "nl" and current is not None:
+            previous_line, line_so_far = line_so_far, ""
     worklist = list(langs)
     while worklist:
         parent = worklist.pop()
@@ -191,6 +235,73 @@ def chunk_languages(lines):
     return ({name: lang for name, lang in langs.items()
              if lang is not CONFLICT},
             plain_uses)
+def interpreter_language(word):
+    """Return the lexer name for interpreter ``word``, or None.
+
+    Any directory prefix is ignored, so ``/usr/bin/python3`` and
+    ``python3`` map alike.
+    """
+    return INTERPRETERS.get(word.rsplit("/", 1)[-1])
+def shebang_language(text):
+    """Return the language a ``#!`` line names, or None."""
+    if not text.startswith("#!"):
+        return None
+    tokens = text[2:].split()
+    if not tokens:
+        return None
+    interpreter = tokens[0]
+    if interpreter.rsplit("/", 1)[-1] == "env" and len(tokens) > 1:
+        interpreter = tokens[1]
+    return interpreter_language(interpreter)
+def heredoc_opener(line):
+    """Return ``(command, delimiter)`` if ``line`` opens a heredoc."""
+    match = HEREDOC_RE.search(line)
+    if match is None:
+        return None
+    command = ""
+    for token in line.split():
+        if ASSIGNMENT_RE.match(token):
+            continue
+        command = token
+        break
+    return command, match.group(2)
+def delimiter_language(delimiter):
+    """Return the language a heredoc delimiter names, or None."""
+    tag = delimiter.lower()
+    for suffix in ("eof", "end", "eot", "doc", "here", "text"):
+        if tag.endswith(suffix) and tag != suffix:
+            tag = tag[:-len(suffix)]
+            break
+    return DELIMITER_TAGS.get(tag)
+def heredoc_language(command, delimiter):
+    """Return a heredoc body's language: interpreter, delimiter, text."""
+    return (interpreter_language(command)
+            or delimiter_language(delimiter)
+            or "text")
+def interpreter_argument_language(before):
+    """Language of an interpreter run ``cmd -c``/``-e`` here, or None.
+
+    ``before`` is the text preceding the chunk use on its own line.
+    """
+    match = INLINE_CODE_RE.search(before)
+    if match is None:
+        return None
+    return interpreter_language(match.group(1))
+def context_language(before, previous, using_language):
+    """Language a use site imposes on the used chunk, or None.
+
+    ``before`` is the text before the use on its line, ``previous``
+    the preceding logical line, ``using_language`` the language of
+    the chunk doing the using.
+    """
+    if before.strip():
+        return interpreter_argument_language(before)
+    opener = heredoc_opener(previous)
+    if opener is not None:
+        return heredoc_language(*opener)
+    if before and using_language == "make":
+        return "bash"
+    return None
 def add_mapping(argument):
     """Add a ``.ext=lexer`` or ``name=lexer`` table mapping.
 
