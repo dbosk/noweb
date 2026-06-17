@@ -48,8 +48,17 @@ The language of a chunk is inferred from its name when the name looks
 like a filename (e.g.\&
 .B fib.py
 or
-.BR Makefile )
-and is inherited through chunk uses otherwise; chunks whose language
+.BR Makefile ),
+from a
+.B #!
+line when the chunk's first line is one,
+and from the lexical context a chunk is used in \(em the body of a
+here-document, the argument of an interpreter run with
+.B \-c
+or
+.BR \-e ,
+or a make recipe \(em which override the language otherwise inherited
+through chunk uses; chunks whose language
 remains unknown are left unannotated.
 It must run before any filter that consumes the annotations, such
 as the autodefs filters or
@@ -189,8 +198,14 @@ The language of a chunk is inferred from its name when the name looks
 like a filename (e.g.\&
 .B fib.py
 or
-.BR Makefile )
-and is inherited through chunk uses otherwise; chunks of unknown
+.BR Makefile ),
+from a
+.B #!
+first line, and from the lexical context a chunk is used in (a
+here-document body, an interpreter
+.BR \-c / \-e
+argument, or a make recipe), and is inherited through chunk uses
+otherwise; chunks of unknown
 language keep the standard rendering.
 Built-in tables cover the popular languages; filenames they miss are
 matched against Pygments' own filename patterns when Pygments is
