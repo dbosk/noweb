@@ -25,7 +25,7 @@ www: $(HTML)
 
 clean:
 	rm -f *~ *.aux *.tex *.dvi *.log *.html *.toc *.pdf *.idx *.ilg *.ind *.out
-	rm -rf _minted fib multilang noweb_lexer.py
+	rm -rf _minted fib multilang embedded labeled noweb_lexer.py
 
 clobber: clean
 
@@ -103,6 +103,37 @@ multilang-tangle: multilang.nw
 	notangle -R'[[Gcd.java]]' multilang.nw > multilang/Gcd.java
 	notangle -R'[[gcd.sh]]'   multilang.nw > multilang/gcd.sh
 	notangle -t8 -R'[[Makefile]]' multilang.nw > multilang/Makefile
+# embedded.nw shows autolang labeling chunks by lexical context: a
+# shebang, a python3 -c argument, two here-document bodies, and a make
+# recipe.  One highlighted, indexed weave stacks python3/sh/make.
+embedded.tex: embedded.nw
+	$(NOWEAVE) -delay -autolang -autodefs python3 -autodefs sh -autodefs make -index -filter 'tominted -lexer noweb_lexer.py' embedded.nw > $@
+embedded.pdf: embedded.tex noweb_lexer.py
+	mkdir -p _minted
+	pdflatex -shell-escape embedded.tex
+	pdflatex -shell-escape embedded.tex
+# Tangle the script and its helpers into their own subdirectory (the
+# tangled Makefile would otherwise clobber this one); -t8 keeps tabs.
+embedded-tangle: embedded.nw
+	mkdir -p embedded
+	notangle -R'[[summarize]]' embedded.nw > embedded/summarize
+	notangle -t8 -R'[[Makefile]]' embedded.nw > embedded/Makefile
+# labeled.nw shows -langrule classifying chunks whose names are not
+# filenames: a "test" chunk labeled python and a "check" chunk labeled
+# bash, both embedding the same greet.py.  One highlighted, indexed
+# weave applies both rules and stacks python3/sh.
+labeled.tex: labeled.nw
+	$(NOWEAVE) -delay -autolang -langrule 'test \[\[.*\.py\]\]=python' -langrule 'check \[\[.*\.py\]\]=bash' -autodefs python3 -autodefs sh -index -filter 'tominted -lexer noweb_lexer.py' labeled.nw > $@
+labeled.pdf: labeled.tex noweb_lexer.py
+	mkdir -p _minted
+	pdflatex -shell-escape labeled.tex
+	pdflatex -shell-escape labeled.tex
+# Tangle the module, its test and its smoke check into a subdirectory.
+labeled-tangle: labeled.nw
+	mkdir -p labeled
+	notangle -R'[[greet.py]]' labeled.nw > labeled/greet.py
+	notangle -R'test [[greet.py]]' labeled.nw > labeled/test_greet.py
+	notangle -R'check [[greet.py]]' labeled.nw > labeled/check-greet.sh
 mipscoder.html: mipscoder.nw
 	$(NOWEAVE) -filter l2h -index -autodefs sml -html mipscoder.nw > $@
 mipscoder.tex: mipscoder.nw
