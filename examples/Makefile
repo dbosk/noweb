@@ -25,7 +25,7 @@ www: $(HTML)
 
 clean:
 	rm -f *~ *.aux *.tex *.dvi *.log *.html *.toc *.pdf *.idx *.ilg *.ind *.out
-	rm -rf _minted fib multilang embedded noweb_lexer.py
+	rm -rf _minted fib multilang embedded labeled noweb_lexer.py
 
 clobber: clean
 
@@ -118,6 +118,22 @@ embedded-tangle: embedded.nw
 	mkdir -p embedded
 	notangle -R'[[summarize]]' embedded.nw > embedded/summarize
 	notangle -t8 -R'[[Makefile]]' embedded.nw > embedded/Makefile
+# labeled.nw shows -langrule classifying chunks whose names are not
+# filenames: a "test" chunk labeled python and a "check" chunk labeled
+# bash, both embedding the same greet.py.  One highlighted, indexed
+# weave applies both rules and stacks python3/sh.
+labeled.tex: labeled.nw
+	$(NOWEAVE) -delay -autolang -langrule 'test \[\[.*\.py\]\]=python' -langrule 'check \[\[.*\.py\]\]=bash' -autodefs python3 -autodefs sh -index -filter 'tominted -lexer noweb_lexer.py' labeled.nw > $@
+labeled.pdf: labeled.tex noweb_lexer.py
+	mkdir -p _minted
+	pdflatex -shell-escape labeled.tex
+	pdflatex -shell-escape labeled.tex
+# Tangle the module, its test and its smoke check into a subdirectory.
+labeled-tangle: labeled.nw
+	mkdir -p labeled
+	notangle -R'[[greet.py]]' labeled.nw > labeled/greet.py
+	notangle -R'test [[greet.py]]' labeled.nw > labeled/test_greet.py
+	notangle -R'check [[greet.py]]' labeled.nw > labeled/check-greet.sh
 mipscoder.html: mipscoder.nw
 	$(NOWEAVE) -filter l2h -index -autodefs sml -html mipscoder.nw > $@
 mipscoder.tex: mipscoder.nw

@@ -71,6 +71,7 @@ LEXERS_BY_EXT = {
     ".f90": "fortran",
     ".f95": "fortran",
 }
+LEXER_RULES = []   # list of (compiled regex, lexer alias)
 try:
     from pygments.lexers import find_lexer_class_for_filename
 except ImportError:
@@ -108,11 +109,15 @@ INLINE_CODE_RE = re.compile(r'(\S+)\s+-[ce]\s+["\']?\s*$')
 def lexer_for_chunk(name):
     """Return the Pygments lexer for chunk ``name``, or None.
 
-    The chunk name may use noweb's ``[[...]]`` quoting and may
-    contain directory separators; only the basename decides.
-    Names the built-in tables do not cover are matched against
+    A user-supplied rule matching the whole name wins first.
+    Otherwise the chunk name may use noweb's ``[[...]]`` quoting and
+    may contain directory separators; only the basename decides, and
+    names the built-in tables do not cover are matched against
     Pygments' filename patterns when Pygments is installed.
     """
+    for pattern, lexer in LEXER_RULES:
+        if pattern.search(name):
+            return lexer
     if name.startswith("[[") and name.endswith("]]"):
         name = name[2:-2]
     basename = name.rsplit("/", 1)[-1]
@@ -299,10 +304,19 @@ def context_language(before, previous, using_language):
         return "bash"
     return None
 def add_mapping(argument):
-    """Add a ``.ext=lexer`` or ``name=lexer`` table mapping.
+    """Add a lexer rule or table mapping from a command-line argument.
 
-    Returns False when ``argument`` is not of that form.
+    ``re:regex=lexer`` appends a rule matched against the whole
+    chunk name; ``.ext=lexer`` and ``name=lexer`` extend the
+    extension and basename tables.  Returns False when ``argument``
+    is none of those forms.
     """
+    if argument.startswith("re:"):
+        pattern, sep, value = argument[3:].rpartition("=")
+        if not sep:
+            return False
+        LEXER_RULES.append((re.compile(pattern), value))
+        return True
     key, sep, value = argument.partition("=")
     if not sep:
         return False
