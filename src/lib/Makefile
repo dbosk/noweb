@@ -5,7 +5,7 @@ LIB=/dev/null
 SHELL=/bin/sh
 CINAME=
 CIMSG=
-RCSFILES=emptydefn toascii.nw tominted.nw unmarkup Makefile nwmtime pipedocs h2a btdefn
+RCSFILES=emptydefn toascii.nw autolang.nw unmarkup Makefile nwmtime pipedocs h2a btdefn
 
 all: toascii tominted autolang noweb_lexer.py
 	chmod +x unmarkup emptydefn nwmtime pipedocs h2a btdefn
@@ -31,16 +31,16 @@ toascii: toascii.nw
 	notangle -R$@ toascii.nw > $@
 	chmod +x $@
 
-tominted: tominted.nw
-	notangle -R$@ tominted.nw > $@
+autolang: autolang.nw
+	notangle -R$@ autolang.nw > $@
 	chmod +x $@
 
-autolang: tominted.nw
-	notangle -R$@ tominted.nw > $@
+tominted: autolang.nw
+	notangle -R$@ autolang.nw > $@
 	chmod +x $@
 
-noweb_lexer.py: tominted.nw
-	notangle -R'[[noweb_lexer.py]]' tominted.nw > $@
+noweb_lexer.py: autolang.nw
+	notangle -R'[[noweb_lexer.py]]' autolang.nw > $@
 
 clean:
 	rm -f *.log *.blg *.dvi *.toc *.aux *.tex *~

@@ -1,54 +1,65 @@
-\section{Highlighting code chunks with minted}
+\section{Inferring chunk languages: \texttt{autolang} and
+\texttt{tominted}}
 
-This filter adds syntax highlighting to [[noweave]]'s LaTeX output by
-typesetting code chunks with the \texttt{minted} package instead of
-noweb's plain typewriter rendering.  Each chunk is highlighted
-according to its own language, so a literate program that defines,
-say, both a [[Makefile]] and a Python program gets each chunk
-highlighted with the right lexer.
+A noweb markup stream says nothing about the programming language of
+its code chunks: [[markup]] emits chunk names, boundaries and text,
+but no language.  Several tools need that language anyway---the
+autodefs filters must know a chunk's grammar before they will scan it
+for definitions, and a syntax highlighter must choose a lexer.  This
+file infers a chunk's language from the only evidence the stream
+offers---a name that looks like a filename (e.g.\ [[fib.py]] or
+[[Makefile]]), a shebang line, or the lexical context a chunk is used
+in---and propagates it through chunk uses to the chunks that carry no
+hint of their own.  That inference is the heart of the file, and it is
+exposed as two filters.
 
-Typical use, as the \emph{last} filter on the command line:
+\begin{description}
+\item[ [[autolang]] ] runs the inference alone and writes the result
+back into the stream as [[@language]] lines for filters downstream to
+read (Section~\ref{sec:autolang}).  It runs \emph{first} and is
+independent of the backend.  This is the headline use:
+[[noweave -autolang]] is what makes the autodefs filters
+language-aware, and what lets [[-index]] discover which autodefs
+scanners a document actually needs.
+\item[ [[tominted]] ] runs the same inference and then \emph{acts} on
+it, replacing each code chunk of known language with a [[minted]]
+environment so the \LaTeX\ backend typesets it with Pygments
+highlighting.  It runs \emph{last}, targets \LaTeX\ only (never with
+[[-html]]), and needs the woven document compiled with shell escape,
+e.g.\ [[pdflatex -shell-escape fib.tex]], because \texttt{minted} runs
+Pygments at compile time.  Typical use, as the last filter:
 \begin{verbatim}
-noweave -autodefs python3 -index -filter tominted fib.nw > fib.tex
+noweave -autolang -index -filter tominted fib.nw > fib.tex
 \end{verbatim}
-The woven document must load the \texttt{minted} package, and it must
-be compiled with shell escape enabled, e.g.\
-[[pdflatex -shell-escape fib.tex]], because \texttt{minted} runs
-Pygments at compile time.  This filter targets the LaTeX backend only;
-do not combine it with [[-html]].
+\end{description}
 
-\subsection{Overview}
+Because both filters share the inference, it lives in chunks of its
+own---[[inference constants]] and [[inference functions]]---that each
+program includes.  [[tominted]] is the larger of the two, so this file
+develops it first and the inference appears there as its first pass;
+the short Section~\ref{sec:autolang} then adds [[autolang]] as a thin
+wrapper that runs that pass alone.  Everything in [[tominted]] past the
+shared inference serves highlighting, not language detection.
 
-The filter is a Python~3 program that copies the noweb markup stream
+\subsection{How \texttt{tominted} works}
+
+[[tominted]] is a Python~3 program that copies the noweb markup stream
 from standard input to standard output, rewriting some code chunks.
 It works in two passes over the (buffered) stream:
 
 \begin{enumerate}
-\item Determine the language of every code chunk.  A chunk whose name
-      looks like a filename (e.g.\ [[fib.py]] or [[Makefile]]) gets
-      the corresponding Pygments lexer; every other chunk inherits the
-      language of the chunks that use it.  We must infer languages
-      ourselves because noweb's [[markup]] emits no language
-      information---the chunk names are the only hint there is.
-      (An upstream filter may have annotated chunks with the
-      [[@language]] keyword of the pipeline grammar; such
-      annotations are honored as authoritative,
-      Section~\ref{sec:autolang}.)
+\item Determine the language of every code chunk, the shared inference
+      described above: a filename-like name gets the corresponding
+      Pygments lexer; every other chunk inherits the language of the
+      chunks that use it.  An upstream [[autolang]] may already have
+      annotated chunks with the [[@language]] keyword of the pipeline
+      grammar; such annotations are honored as authoritative.
 \item Rewrite each code chunk whose language is known.  The chunk's
       [[@text]] lines are replaced by [[@literal]] lines that the
       LaTeX backend copies verbatim, wrapping the code in a
       [[minted]] environment.  Chunks of unknown language pass
       through untouched and keep noweb's classic rendering.
 \end{enumerate}
-
-This file produces a second filter from the same machinery:
-[[autolang]] (Section~\ref{sec:autolang}) runs pass~1 alone, at the
-\emph{start} of the pipeline, and publishes the result as
-[[@language]] lines for other filters to consume---noweb's autodefs
-filters use it to skip chunks in languages they do not understand.
-The inference is therefore kept in chunks of its own,
-[[inference constants]] and [[inference functions]], which both
-programs include.
 
 Running last in the pipeline matters: after [[finduses]] and [[noidx]]
 have run, all cross-reference labels exist in the stream, so we can

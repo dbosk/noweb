@@ -79,7 +79,7 @@ printf '{"custom_lexers": {"noweb_lexer.py": "%s"}}\n' \
 ```
 
 The hash must be updated whenever noweb_lexer.py changes. The
-lexer file itself (tangled from src/lib/tominted.nw and installed
+lexer file itself (tangled from src/lib/autolang.nw and installed
 with noweb) must be readable from the directory where pdflatex
 runs; the Makefile copies it here.
 
