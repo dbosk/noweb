@@ -44,12 +44,16 @@ install: $(EXECS)
 	cp $(BINEXECS) $(BIN)
 	cp $(LIBSPECIAL) $(LIB)/autodefs.c
 	cp autodefs.sh $(LIB)/autodefs.bash
+	cp autodefs.python3 $(LIB)/autodefs.python
+	cp autodefs.tex $(LIB)/autodefs.latex
 
 uninstall:
 	for i in $(LIBEXECS); do rm -f $(LIB)/$$i; done
 	for i in $(BINEXECS); do rm -f $(BIN)/$$i; done
 	rm -f $(LIB)/autodefs.c
 	rm -f $(LIB)/autodefs.bash
+	rm -f $(LIB)/autodefs.python
+	rm -f $(LIB)/autodefs.latex
 
 clean:
 	rm -f *.tex *.dvi *.aux *.log *.blg *.bbl *~ *.toc *.html *.u1 *.u2

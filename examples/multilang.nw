@@ -2,7 +2,7 @@
 \usepackage[minted]{noweb}
 \pagestyle{noweb}
 \title{Greatest common divisor:\\
-  one function, six languages, one stacked index}
+  one function, six languages, indexed by one command}
 \author{Daniel Bosk}
 \begin{document}
 \maketitle
@@ -12,17 +12,17 @@
 This example is the companion to [[fib.nw]].  Where that document
 shows [[-autolang]] making a single [[-autodefs]] filter \emph{skip}
 the chunks it does not understand, this one shows the other half of
-the same mechanism: several [[-autodefs]] filters \emph{stacked}, so
-that each chunk is indexed by the filter for its own language.
+the same mechanism: the definition scanners \emph{stacked}, one per
+language, so that each chunk is indexed by the scanner for its own
+language---and the whole stack assembled by [[-autolang]] alone.
 
 The document implements Euclid's algorithm for the greatest common
-divisor once in each of the six languages whose definition scanners
-were added alongside [[autolang]]---C++, Rust, Haskell, Java and
-shell---together with a Makefile that builds them.  Each
+divisor once in each of six languages---C++, Rust, Haskell, Java and
+shell, together with a Makefile that builds them.  Each
 implementation is a root chunk named like a file, e.g.\
-[[gcd.cpp]] or [[Gcd.java]].  That naming is not decoration:
-[[autolang]] infers a chunk's language from a filename-like name,
-annotates the chunk with it, and the matching [[-autodefs]] filter
+[[gcd.cpp]] or [[Gcd.java]].  That naming is load-bearing:
+[[autolang]] infers a chunk's language from its filename-like name
+and annotates the chunk with it, and the scanner for that language
 then finds the definitions in exactly those chunks.
 
 The algorithm is deliberately the same throughout---[[while b]] is
@@ -30,32 +30,35 @@ nonzero, replace the pair with [[b]] and [[a mod b]]---so that what
 varies between sections is only the language and what its definition
 scanner reports, not the problem being solved.
 
-\subsection{Two builds, and why they differ}
+\subsection{One command finds every language}
 
-[[noweave]] has seven filter slots, and more than the [[-autodefs]]
-filters compete for them.  Building the index inserts two filters of
-its own---[[finduses]] and [[noidx]]; [[-autolang]] inserts one; and
-the [[tominted]] highlighter is a [[-filter]], so it takes one more.
-A highlighted, indexed weave therefore has room for only three
-[[-autodefs]] filters ($7-2-1-1$), and a classic indexed weave for
-four ($7-2-1$).  Six languages fit in neither, so the examples'
-Makefile builds this document twice:
+Because [[autolang]] already determines each chunk's language, it can
+also choose the [[-autodefs]] filters.  Given [[-index]],
+[[-autolang]] runs its inference once before the weave, collects the
+set of languages the document actually contains, and adds the
+matching scanner for each.  The whole document is therefore woven,
+highlighted and indexed by one command that names no language:
 
-\begin{description}
-\item[ [[multilang.pdf]] ] highlighted with [[tominted]], indexing
-the three languages a C++ project actually builds and scripts
-around---[[-autodefs cpp]], [[-autodefs sh]] and [[-autodefs make]].
-Every chunk is syntax-highlighted; the Rust, Haskell and Java
-definitions appear but are not indexed in this build.
-\item[ [[multilang-defs.pdf]] ] the classic rendering, indexing the
-remaining three compiled languages with [[-autodefs rust]],
-[[-autodefs haskell]] and [[-autodefs java]].  No highlighting, but
-the index now carries their definitions.
-\end{description}
+\begin{verbatim}
+noweave -delay -autolang -index \
+    -filter 'tominted -lexer noweb_lexer.py' \
+    multilang.nw > multilang.tex
+\end{verbatim}
 
-Between them the two builds exercise all six scanners.  The split is
-the lesson: it is exactly the slot budget that forces it, and a
-project mixing this many languages will meet the same ceiling.
+[[autolang]] discovers C++, Rust, Haskell, Java, shell and make, and
+stacks [[autodefs.cpp]] through [[autodefs.make]] ahead of the index
+filters, so every chunk is indexed by the scanner for its own
+language.
+
+That convenience rests on a more basic one.  Six scanners alongside
+the index filters and the [[tominted]] highlighter once overflowed
+[[noweave]]'s fixed filter slots, which forced a document like this to
+be woven twice, splitting the languages across two passes.  The
+pipeline now grows without a fixed ceiling, so the scanners fit in a
+single weave; discovery then removes the need to list them.  A
+hand-written [[-autodefs]] still works---it is merged with the
+discovered set and never stacked twice---for the rare chunk whose
+language [[autolang]] cannot infer.
 
 \section{C++}
 
@@ -251,25 +254,19 @@ indexed by [[autodefs.sh]] instead if this chunk were shell.
 
 \section{Building this document}
 
-The highlighted build carries [[tominted]] and the three systems
-scanners:
+A single weave highlights every chunk and indexes every language;
+[[-autolang]] supplies the scanners, so no [[-autodefs]] appears:
 \begin{verbatim}
-noweave -delay -autolang -autodefs cpp -autodefs sh \
-    -autodefs make -index \
+noweave -delay -autolang -index \
     -filter 'tominted -lexer noweb_lexer.py' \
     multilang.nw > multilang.tex
 pdflatex -shell-escape multilang.tex
 \end{verbatim}
-The classic build indexes the remaining three compiled languages and
-omits [[tominted]]:
-\begin{verbatim}
-noweave -delay -autolang -autodefs rust -autodefs haskell \
-    -autodefs java -index multilang.nw > multilang-defs.tex
-pdflatex multilang-defs.tex
-\end{verbatim}
-The examples' Makefile wires both as [[make multilang.pdf]] and
-[[make multilang-defs.pdf]]; the highlighted one needs the one-time
-[[latexminted]] setup described in [[README.python]].
+The examples' Makefile wires this as [[make multilang.pdf]]; the
+highlighted build needs the one-time [[latexminted]] setup described
+in [[README.python]].  Dropping the [[tominted]] filter (and the
+[[-shell-escape]]) gives the classic, unhighlighted rendering with the
+same six-language index.
 
 \section{Chunks and identifiers}
 

@@ -1360,16 +1360,33 @@ if __name__ == "__main__":
     autolang_main()
 @
 
-The main program is pass~1 followed by an annotating copy of the
-stream.  The string-embedded use sites are irrelevant here---they
-matter only for rendering---so the second half of
-[[chunk_languages]]' result is dropped.
+The main program runs pass~1 and then emits one of two views of its
+result, chosen by a [[-list]] flag.  The string-embedded use sites
+feed neither view---they matter only for rendering---so the second
+half of [[chunk_languages]]' result is dropped in both.
+
+Without [[-list]] the program annotates: it copies the stream back
+out with an [[@language]] line on every classified chunk, the job
+described above.  With [[-list]] it instead prints just the distinct
+languages it found, one per line, and copies nothing.  That second
+view exists for [[noweave]]'s sake.  A weave must decide \emph{which}
+[[autodefs]] filters to splice into its pipeline before any markup
+flows through it, yet only this inference knows which languages a
+document actually contains.  So [[noweave -autolang -index]] runs
+[[autolang -list]] as a pre-pass solely to learn that set, then adds
+one [[autodefs]] filter per language (see [[noweave.nw]]).  Sorting
+makes the output order independent of how the chunks happened to
+hash, which keeps the assembled pipeline---and the weave's [[-v]]
+trace of it---reproducible.
 
 <<autolang functions>>=
 def autolang_main():
-    """Annotate a noweb markup stream from stdin to stdout."""
+    """Annotate a markup stream, or list its languages with ``-list``."""
+    list_languages = False
     for argument in sys.argv[1:]:
-        if not add_mapping(argument):
+        if argument in ("-list", "--list-languages"):
+            list_languages = True
+        elif not add_mapping(argument):
             print("autolang: unknown argument:", argument,
                   file=sys.stderr)
             sys.exit(1)
@@ -1377,8 +1394,12 @@ def autolang_main():
     if lines and lines[-1] == "":
         lines.pop()
     langs, _ = chunk_languages(lines)
-    for line in annotate(lines, langs):
-        print(line)
+    if list_languages:
+        for language in sorted(set(langs.values())):
+            print(language)
+    else:
+        for line in annotate(lines, langs):
+            print(line)
 @
 
 The annotation is inserted directly after a chunk's [[@defn]] line,
