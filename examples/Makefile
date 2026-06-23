@@ -76,23 +76,16 @@ fib-run: fib/fib.py fib/Makefile
 	$(MAKE) -C fib test
 	$(MAKE) -C fib run
 # multilang.nw exercises all six new -autodefs filters (cpp, rust,
-# haskell, java, sh, make).  They do not fit one weave: -index uses
-# two of noweave's seven filter slots, -autolang one and tominted
-# one, leaving three -autodefs for a highlighted weave and four for a
-# classic one.  So multilang.pdf highlights everything and indexes
-# cpp/sh/make, while multilang-defs.pdf classically indexes the rest.
+# haskell, java, sh, make).  -autolang discovers the languages and
+# stacks the matching scanners itself, so one weave indexes all six
+# with no -autodefs listed; the pipeline has no fixed slot ceiling.
 # See multilang.nw's introduction.
 multilang.tex: multilang.nw
-	$(NOWEAVE) -delay -autolang -autodefs cpp -autodefs sh -autodefs make -index -filter 'tominted -lexer noweb_lexer.py' multilang.nw > $@
+	$(NOWEAVE) -delay -autolang -index -filter 'tominted -lexer noweb_lexer.py' multilang.nw > $@
 multilang.pdf: multilang.tex noweb_lexer.py
 	mkdir -p _minted
 	pdflatex -shell-escape multilang.tex
 	pdflatex -shell-escape multilang.tex
-multilang-defs.tex: multilang.nw
-	$(NOWEAVE) -delay -autolang -autodefs rust -autodefs haskell -autodefs java -index multilang.nw > $@
-multilang-defs.pdf: multilang-defs.tex
-	pdflatex multilang-defs.tex
-	pdflatex multilang-defs.tex
 # Tangle every implementation into its own subdirectory (the tangled
 # Makefile would otherwise clobber this one); -t8 keeps make's tabs.
 multilang-tangle: multilang.nw

@@ -4,8 +4,9 @@ multilang.nw implements Euclid's greatest-common-divisor algorithm in
 five languages---C++, Rust, Haskell, Java and shell---with a Makefile
 that builds them.  Where fib.nw shows `-autolang` making one autodefs
 filter skip the chunks it does not understand, this example shows the
-other half of the mechanism: several autodefs filters *stacked*, so
-each chunk is indexed by the filter for its own language.
+other half of the mechanism: the language scanners *stacked*, one per
+language, so each chunk is indexed by the scanner for its own
+language---and the whole stack assembled by `-autolang` alone.
 
 It is the worked example (and de facto regression test) for the
 language scanners added alongside autolang: autodefs.cpp,
@@ -13,27 +14,27 @@ autodefs.rust, autodefs.haskell, autodefs.java, autodefs.sh and
 autodefs.make.  If a scanner stops finding definitions, the woven
 index changes.
 
-## Two builds, and why there are two
+## One command finds every language
 
-noweave has seven filter slots.  Building the index inserts two
-filters of its own (finduses and noidx); `-autolang` inserts one; and
-the tominted highlighter is a `-filter`, so it takes one more.  A
-highlighted, indexed weave therefore has room for only three
-`-autodefs` filters (7 - 2 - 1 - 1), and a classic indexed weave for
-four (7 - 2 - 1).  Six languages fit in neither, so the example is
-built twice:
+Because `-autolang` already determines each chunk's language, it can
+also choose the autodefs filters.  Given `-index`, it runs its
+inference once before the weave, collects the languages the document
+actually contains, and stacks the matching scanner for each---so one
+command indexes all six languages and names none of them:
 
-- `multilang.pdf` -- highlighted with tominted, indexing the three
-  languages a C++ project actually builds and scripts around
-  (`-autodefs cpp -autodefs sh -autodefs make`).  Every chunk is
-  syntax-highlighted; Rust, Haskell and Java definitions appear but
-  are not indexed in this build.
-- `multilang-defs.pdf` -- the classic rendering, indexing the
-  remaining three compiled languages
-  (`-autodefs rust -autodefs haskell -autodefs java`).  No
-  highlighting, but the index carries their definitions.
+```bash
+noweave -delay -autolang -index \
+    -filter 'tominted -lexer noweb_lexer.py' \
+    multilang.nw > multilang.tex
+```
 
-Between them the two builds exercise all six scanners.
+This once required two builds.  Six scanners plus the index filters
+(finduses and noidx) plus tominted overflowed noweave's old fixed
+filter slots, so the languages had to be split across a highlighted
+pass and a classic one.  The pipeline now grows without a fixed
+ceiling, so the scanners fit in a single weave, and discovery removes
+the need to list them.  A hand-written `-autodefs` is still honored
+and merged with the discovered set without duplication.
 
 ## Requirements
 
@@ -51,28 +52,22 @@ Between them the two builds exercise all six scanners.
 
 ## Building
 
-Highlighted, indexing C++/shell/make:
+One highlighted weave indexes all six languages; `-autolang` supplies
+the scanners, so no `-autodefs` appears:
 
 ```bash
-noweave -delay -autolang -autodefs cpp -autodefs sh -autodefs make \
-    -index -filter 'tominted -lexer noweb_lexer.py' \
+noweave -delay -autolang -index \
+    -filter 'tominted -lexer noweb_lexer.py' \
     multilang.nw > multilang.tex
 pdflatex -shell-escape multilang.tex
 pdflatex -shell-escape multilang.tex
 ```
 
-Classic, indexing Rust/Haskell/Java:
-
-```bash
-noweave -delay -autolang -autodefs rust -autodefs haskell \
-    -autodefs java -index multilang.nw > multilang-defs.tex
-pdflatex multilang-defs.tex
-pdflatex multilang-defs.tex
-```
-
-The examples' Makefile wires both: `make multilang.pdf
-multilang-defs.pdf`.  The highlighted build needs the one-time
-latexminted setup for the custom lexer described in README.python.
+The examples' Makefile wires this as `make multilang.pdf`.  The
+highlighted build needs the one-time latexminted setup for the custom
+lexer described in README.python.  Dropping the tominted filter (and
+`-shell-escape`) gives the classic, unhighlighted rendering with the
+same six-language index.
 
 ## Tangling and running
 
