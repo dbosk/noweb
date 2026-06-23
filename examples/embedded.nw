@@ -15,7 +15,7 @@ interesting chunks have names that say nothing---[[the banner
 one-liner]], [[python summary body]]---yet each is written in a
 definite language because of \emph{where it is used}.  This is what
 [[autolang]] learns to read in Section~\ref{sec:context} of
-[[tominted.nw]]: a chunk's language can be imposed by its use site or
+[[autolang.nw]]: a chunk's language can be imposed by its use site or
 by its own first line, not only by its name.
 
 The document is one small shell program, [[summarize]], that prints a

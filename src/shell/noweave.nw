@@ -345,7 +345,7 @@ languages are not known until the inference has read the whole
 stream---a filter cannot add filters behind itself.  The only way out
 is to run the inference once \emph{ahead} of the real pipeline, purely
 to learn the language set; that is what [[autolang -list]] is for
-(see [[tominted.nw]]).
+(see [[autolang.nw]]).
 
 We restrict this to weaves that index ([[using_index]]): an autodefs
 filter exists to feed [[finduses]]/[[noidx]], so without [[-index]]

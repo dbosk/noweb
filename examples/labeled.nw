@@ -21,7 +21,7 @@ does not try, because the guess would often be wrong: a chunk that
 script that runs it.
 
 The remedy is a rule.  [[noweave]]'s [[-langrule]] option (the
-[[re:regex=lexer]] form of [[autolang]], described in [[tominted.nw]])
+[[re:regex=lexer]] form of [[autolang]], described in [[autolang.nw]])
 labels every chunk whose name matches a regular expression.  Because the
 regex is matched against the \emph{whole} chunk name, the label in front
 of the file reference is what the rule keys on---so two chunks that embed
