@@ -40,8 +40,7 @@ matching scanner for each.  The whole document is therefore woven,
 highlighted and indexed by one command that names no language:
 
 \begin{verbatim}
-noweave -delay -autolang -index \
-    -filter 'tominted -lexer noweb_lexer.py' \
+noweave -delay -autolang -index -filter tominted \
     multilang.nw > multilang.tex
 \end{verbatim}
 
@@ -257,8 +256,7 @@ indexed by [[autodefs.sh]] instead if this chunk were shell.
 A single weave highlights every chunk and indexes every language;
 [[-autolang]] supplies the scanners, so no [[-autodefs]] appears:
 \begin{verbatim}
-noweave -delay -autolang -index \
-    -filter 'tominted -lexer noweb_lexer.py' \
+noweave -delay -autolang -index -filter tominted \
     multilang.nw > multilang.tex
 pdflatex -shell-escape multilang.tex
 \end{verbatim}

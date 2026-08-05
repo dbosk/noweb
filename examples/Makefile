@@ -25,7 +25,7 @@ www: $(HTML)
 
 clean:
 	rm -f *~ *.aux *.tex *.dvi *.log *.html *.toc *.pdf *.idx *.ilg *.ind *.out
-	rm -rf _minted fib multilang embedded labeled noweb_lexer.py
+	rm -rf _minted fib multilang embedded labeled
 
 clobber: clean
 
@@ -37,10 +37,14 @@ dag.html: dag.nw
 	$(NOWEAVE) -filter l2h -index -autodefs icon -html dag.nw > $@
 dag.tex: dag.nw
 	$(NOWEAVE) -index -autodefs icon dag.nw > $@
-# fib.tex is highlighted with minted; fib-xref.tex is the classic
-# rendering, in which identifier uses inside code are hyperlinked.
-# Both need pdflatex -shell-escape (minted runs Pygments); see
-# README.python.
+# fib.tex is highlighted with minted; chunk references stay
+# hyperlinked even inside the docstring, via the bundled custom
+# Pygments lexer that tominted uses by default.  Requires one-time
+# setup: whitelist noweb_lexer.py by SHA-256 hash in
+# ~/.latexminted_config (see README.python).  fib-xref.tex is the
+# classic rendering, in which identifier uses inside code are
+# hyperlinked instead.  Both need pdflatex -shell-escape (minted
+# runs Pygments).
 fib.tex: fib.nw
 	$(NOWEAVE) -delay -autolang -autodefs python3 -index -filter tominted fib.nw > $@
 fib-xref.tex: fib.nw
@@ -52,18 +56,6 @@ fib.pdf: fib.tex
 fib-xref.pdf: fib-xref.tex
 	pdflatex -shell-escape fib-xref.tex
 	pdflatex -shell-escape fib-xref.tex
-# fib-linked.pdf keeps chunk references hyperlinked even inside the
-# docstring, via the custom Pygments lexer.  Requires one-time setup:
-# whitelist noweb_lexer.py by SHA-256 hash in ~/.latexminted_config
-# (see README.python).
-noweb_lexer.py: ../src/lib/noweb_lexer.py
-	cp ../src/lib/noweb_lexer.py $@
-fib-linked.tex: fib.nw
-	$(NOWEAVE) -delay -autolang -autodefs python3 -index -filter 'tominted -lexer noweb_lexer.py' fib.nw > $@
-fib-linked.pdf: fib-linked.tex noweb_lexer.py
-	mkdir -p _minted
-	pdflatex -shell-escape fib-linked.tex
-	pdflatex -shell-escape fib-linked.tex
 # The tangled Makefile would clobber this one, so fib tangles into
 # its own subdirectory; -t8 keeps the tabs make needs.
 fib/fib.py: fib.nw
@@ -81,8 +73,8 @@ fib-run: fib/fib.py fib/Makefile
 # with no -autodefs listed; the pipeline has no fixed slot ceiling.
 # See multilang.nw's introduction.
 multilang.tex: multilang.nw
-	$(NOWEAVE) -delay -autolang -index -filter 'tominted -lexer noweb_lexer.py' multilang.nw > $@
-multilang.pdf: multilang.tex noweb_lexer.py
+	$(NOWEAVE) -delay -autolang -index -filter tominted multilang.nw > $@
+multilang.pdf: multilang.tex
 	mkdir -p _minted
 	pdflatex -shell-escape multilang.tex
 	pdflatex -shell-escape multilang.tex
@@ -100,8 +92,8 @@ multilang-tangle: multilang.nw
 # shebang, a python3 -c argument, two here-document bodies, and a make
 # recipe.  One highlighted, indexed weave stacks python3/sh/make.
 embedded.tex: embedded.nw
-	$(NOWEAVE) -delay -autolang -autodefs python3 -autodefs sh -autodefs make -index -filter 'tominted -lexer noweb_lexer.py' embedded.nw > $@
-embedded.pdf: embedded.tex noweb_lexer.py
+	$(NOWEAVE) -delay -autolang -autodefs python3 -autodefs sh -autodefs make -index -filter tominted embedded.nw > $@
+embedded.pdf: embedded.tex
 	mkdir -p _minted
 	pdflatex -shell-escape embedded.tex
 	pdflatex -shell-escape embedded.tex
@@ -116,8 +108,8 @@ embedded-tangle: embedded.nw
 # bash, both embedding the same greet.py.  One highlighted, indexed
 # weave applies both rules and stacks python3/sh.
 labeled.tex: labeled.nw
-	$(NOWEAVE) -delay -autolang -langrule 'test \[\[.*\.py\]\]=python' -langrule 'check \[\[.*\.py\]\]=bash' -autodefs python3 -autodefs sh -index -filter 'tominted -lexer noweb_lexer.py' labeled.nw > $@
-labeled.pdf: labeled.tex noweb_lexer.py
+	$(NOWEAVE) -delay -autolang -langrule 'test \[\[.*\.py\]\]=python' -langrule 'check \[\[.*\.py\]\]=bash' -autodefs python3 -autodefs sh -index -filter tominted labeled.nw > $@
+labeled.pdf: labeled.tex
 	mkdir -p _minted
 	pdflatex -shell-escape labeled.tex
 	pdflatex -shell-escape labeled.tex

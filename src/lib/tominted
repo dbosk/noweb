@@ -7,6 +7,7 @@ replacing the body of every code chunk of known language with a
 ``noweave``, after ``-index``.  See nowebfilters(7).
 """
 
+import os
 import sys
 
 LEXERS_BY_NAME = {
@@ -472,6 +473,20 @@ def rewrite_chunk(chunk, lang, out, start, plain_uses):
     out.append("@nl")
     out.extend(relocated)
     out.extend(trailer)
+def default_lexer():
+    """Return the absolute path of the bundled noweb_lexer.py.
+
+    The lexer file is installed next to this filter.  Returns
+    None, with a warning on stderr, when it is missing.
+    """
+    lexer = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                         "noweb_lexer.py")
+    if os.path.exists(lexer):
+        return lexer
+    print("tominted: warning: noweb_lexer.py not found next to the",
+          "filter; falling back to escapeinside", file=sys.stderr)
+    return None
+
 def lexer_class(lang):
     """Return the noweb_lexer.py class name wrapping ``lang``.
 
@@ -511,6 +526,7 @@ def rewrite_stream(lines, langs, plain_uses):
 def main():
     """Filter a noweb markup stream from stdin to stdout."""
     global CUSTOM_LEXER
+    lexer_chosen = False
     arguments = sys.argv[1:]
     while arguments:
         argument = arguments.pop(0)
@@ -520,11 +536,18 @@ def main():
                       file=sys.stderr)
                 sys.exit(1)
             CUSTOM_LEXER = arguments.pop(0)
+            lexer_chosen = True
+            continue
+        if argument == "-nolexer":
+            CUSTOM_LEXER = None
+            lexer_chosen = True
             continue
         if not add_mapping(argument):
             print("tominted: unknown argument:", argument,
                   file=sys.stderr)
             sys.exit(1)
+    if not lexer_chosen:
+        CUSTOM_LEXER = default_lexer()
     lines = sys.stdin.read().split("\n")
     if lines and lines[-1] == "":
         lines.pop()
