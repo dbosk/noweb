@@ -143,8 +143,7 @@ A single highlighted, indexed weave exercises all four context rules
 and stacks the three relevant scanners:
 \begin{verbatim}
 noweave -delay -autolang -autodefs python3 -autodefs sh \
-    -autodefs make -index \
-    -filter 'tominted -lexer noweb_lexer.py' \
+    -autodefs make -index -filter tominted \
     embedded.nw > embedded.tex
 pdflatex -shell-escape embedded.tex
 \end{verbatim}

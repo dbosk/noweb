@@ -55,8 +55,7 @@ Highlighted, indexing C++/shell/make:
 
 ```bash
 noweave -delay -autolang -autodefs cpp -autodefs sh -autodefs make \
-    -index -filter 'tominted -lexer noweb_lexer.py' \
-    multilang.nw > multilang.tex
+    -index -filter tominted multilang.nw > multilang.tex
 pdflatex -shell-escape multilang.tex
 pdflatex -shell-escape multilang.tex
 ```
