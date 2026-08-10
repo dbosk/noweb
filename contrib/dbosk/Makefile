@@ -28,6 +28,7 @@ install: all
 	if [ -n "$(MAN)" ]; then \
 	  mkdir -p $(MANDIR); \
 	  cp linemark.1 nolinemap.1 $(MANDIR); \
+	  chmod 644 $(MANDIR)/linemark.1 $(MANDIR)/nolinemap.1; \
 	  ln -sf nolinemap.1 $(MANDIR)/noerr.1; \
 	fi
 
