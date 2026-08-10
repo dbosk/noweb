@@ -14,8 +14,10 @@ is a
 filter that inserts a comment line, by default
 .BR "# %L \(dq%F\(dq" ,
 wherever the tangled output jumps to a different place in the noweb
-source: at the start of every code chunk and after every line that
-uses another chunk.
+source: after the first line of every code chunk (announcing its
+second, so that a chunk spliced into the middle of a line never has
+its first line broken), before continuation definitions of the same
+chunk, and after every line that uses another chunk.
 Tangle
 .I without
 the
@@ -58,6 +60,16 @@ When both options are given,
 .B \-L
 wins.
 .TP
+.B \-e, \-\-eager
+Place every chunk's marker before its first line, as earlier
+versions did, and mark after backslash continuations too.
+A chunk spliced into the middle of a line then carries the marker
+inside the broken line, and a marker after a continuation severs
+it, so this suits only consumers that post-process the tangled text
+and repair both themselves (vim-noweb's shadow buffers do); in
+exchange they get an exact map, with no lines anchored across a
+splice.
+.TP
 .B \-h, \-\-help
 Print a help message and exit.
 .SH EXAMPLE
@@ -66,11 +78,17 @@ notangle -Rfoo.py -filter linemark foo.nw > foo.py
 nolinemap python3 foo.py
 .fi
 .SH BUGS
-A chunk used mid-expression (with non-whitespace to the left of the
-chunk reference on the line) gets the used chunk's first marker glued
-into that output line, corrupting the code.
-Statement-position uses, the only idiomatic kind in Python, are
-unaffected.
+The first line of a chunk is anchored by counting from the marker
+before its use site, so an error on it is reported at the line using
+the chunk rather than at its definition.
+The same counting covers any leading lines of a chunk that end in a
+backslash: a marker there would sever the continuation, so it is
+delayed until a line without one, and messages pointing into the
+delayed run come out shifted by the length of the splice detour.
+A chunk whose first line opens a multi-line string cannot be
+protected the same way; the delayed marker lands inside the string.
+The very first line of the tangled file has no marker before it at
+all; messages pointing there are not translated.
 .SH SEE ALSO
 .IR nolinemap (1),
 .IR notangle (1)

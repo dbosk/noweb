@@ -43,10 +43,20 @@ touch:
 
 test: all
 	notangle -Rexample.py -filter ./linemark example.nw > example.py
+	@grep '^print(6\*7)$$' example.py >/dev/null || \
+	  { echo "test FAILED: mid-line splice broken:"; cat example.py; \
+	    exit 1; }
+	notangle -Rexample.py -filter './linemark -e' example.nw \
+	  > example-eager.py
+	@grep '# 16 "example\.nw"' example-eager.py >/dev/null && \
+	 grep '^print(# 22 "example\.nw"$$' example-eager.py >/dev/null || \
+	  { echo "test FAILED: eager markers misplaced:"; \
+	    cat example-eager.py; exit 1; }
 	@if command -v python3 >/dev/null 2>&1; then \
 	  ./nolinemap python3 example.py > test.out 2>&1; \
-	  grep 'example\.nw", line 13' test.out >/dev/null && \
-	  grep 'example\.nw", line 8'  test.out >/dev/null && \
+	  grep '^42$$' test.out >/dev/null && \
+	  grep 'example\.nw", line 6' test.out >/dev/null && \
+	  grep 'example\.nw", line 9' test.out >/dev/null && \
 	  echo "test passed" || \
 	  { echo "test FAILED:"; cat test.out; exit 1; }; \
 	else \
@@ -57,6 +67,6 @@ nolinemap.tex: nolinemap.nw
 	noweave -index nolinemap.nw > nolinemap.tex
 
 clean:
-	rm -f *.tex *.log *.aux *.dvi *.pdf *.toc *~ example.py test.out
+	rm -f *.tex *.log *.aux *.dvi *.pdf *.toc *~ example.py example-eager.py test.out
 
 clobber: clean
