@@ -1,10 +1,12 @@
 LIB=/dev/null  # to be overridden by install
+MAN=           # optional: man root (e.g. /usr/local/man); empty = skip
+MANDIR=$(MAN)/man1
 SHELL=/bin/sh
 
-all: linemark nolinemap
+all: linemark nolinemap linemark.1 nolinemap.1
 	chmod +x linemark nolinemap
 
-source: linemark nolinemap
+source: linemark nolinemap linemark.1 nolinemap.1
 
 linemark: nolinemap.nw
 	notangle -Rlinemark nolinemap.nw | cpif linemark
@@ -14,15 +16,29 @@ nolinemap: nolinemap.nw
 	notangle -Rnolinemap nolinemap.nw | cpif nolinemap
 	chmod +x nolinemap
 
+linemark.1: nolinemap.nw
+	notangle -Rlinemark.1 nolinemap.nw | cpif linemark.1
+
+nolinemap.1: nolinemap.nw
+	notangle -Rnolinemap.1 nolinemap.nw | cpif nolinemap.1
+
 install: all
 	cp linemark nolinemap $(LIB)
 	ln -sf nolinemap $(LIB)/noerr
+	if [ -n "$(MAN)" ]; then \
+	  mkdir -p $(MANDIR); \
+	  cp linemark.1 nolinemap.1 $(MANDIR); \
+	  ln -sf nolinemap.1 $(MANDIR)/noerr.1; \
+	fi
 
 uninstall:
 	rm -f $(LIB)/linemark $(LIB)/nolinemap $(LIB)/noerr
+	if [ -n "$(MAN)" ]; then \
+	  rm -f $(MANDIR)/linemark.1 $(MANDIR)/nolinemap.1 $(MANDIR)/noerr.1; \
+	fi
 
 touch:
-	touch linemark nolinemap
+	touch linemark nolinemap linemark.1 nolinemap.1
 
 test: all
 	notangle -Rexample.py -filter ./linemark example.nw > example.py

@@ -132,6 +132,7 @@ input and writes it, with markers inserted, on standard output.
 # sample usage:
 #   notangle -filter linemark foo.nw > foo.py
 
+<<the [[usage]] function>>
 <<parse the linemark command line>>
 <<choose an awk implementation>>
 LINEMARK_FMT="$fmt" "$AWK" '
@@ -154,7 +155,33 @@ between languages is the comment leader, so [[-c]] provides a
 shortcut: [[-c //]] yields the format [[// %L "%F"]].  When both are
 given, [[-L]] wins, since it is the more explicit of the two.  Both
 options accept the argument either as a separate word or glued to the
-option, the latter for symmetry with [[notangle -L'...']].
+option, the latter for symmetry with [[notangle -L'...']].  [[-h]]
+prints a short help text; the same text doubles as the hint appended
+to error messages about bad options.  The here-document keeps the
+text in one place, and the quoted delimiter keeps the shell from
+expanding anything in it.
+
+<<the [[usage]] function>>=
+usage() {
+  cat <<'EOF'
+usage: linemark [-L fmt] [-c leader]
+
+noweb filter: insert source-location comments into code chunks, so
+that output of tools running on the tangled files can be mapped back
+to the .nw sources by nolinemap(1).  Unlike notangle -L, indentation
+is preserved, so it suits languages like Python.
+
+  -L fmt      marker format; %L = line, %F = file, %% = percent
+              (default: # %L "%F")
+  -c leader   comment leader for the default format (default: #)
+  -h, --help  print this help and exit
+
+sample usage:
+  notangle -filter linemark foo.nw > foo.py
+  nolinemap python3 foo.py
+EOF
+}
+@ %def usage
 
 <<parse the linemark command line>>=
 fmt=
@@ -170,8 +197,9 @@ do
             { echo "linemark: option -c needs an argument" 1>&2; exit 1; }
           leader="$2"; shift 2 ;;
     -c?*) leader="${1#-c}"; shift ;;
+    -h|--help) usage; exit 0 ;;
     --)   shift; break ;;
-    -*)   echo "linemark: unknown option $1" 1>&2; exit 1 ;;
+    -*)   echo "linemark: unknown option $1" 1>&2; usage 1>&2; exit 1 ;;
     *)    break ;;
   esac
 done
@@ -653,7 +681,13 @@ that was used when tangling, [[-c]] just the comment leader, and with
 neither the default matches [[linemark]]'s default, so the common
 case needs no options at all.  Everything after the options is a
 command to run; without one, [[nolinemap]] filters standard input,
-for use as [[make 2>&1 | nolinemap]].
+for use as [[make 2>&1 | nolinemap]].  The [[-h]] output gets an
+epilog with worked examples---the two modes are easier to show than
+to describe---which needs the raw formatter, since argparse otherwise
+reflows the lines into a paragraph.  One trap: argparse
+percent-expands option help strings (for [[%(default)s]] and
+friends), so the percent signs of the embedded marker format must be
+doubled or [[-h]] crashes; the epilog is spared that expansion.
 
 In command mode the child's standard output and standard error are
 both translated---compilers split their messages between the two
@@ -668,10 +702,18 @@ def main():
     parser = argparse.ArgumentParser(
         prog="nolinemap",
         description="Translate messages pointing into tangled files "
-                    "so that they point into the .nw sources.")
+                    "so that they point into the .nw sources.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="examples:\n"
+               "  notangle -Rfoo.py -filter linemark foo.nw > foo.py\n"
+               "  nolinemap python3 foo.py     # run mode, keeps exit"
+               " status\n"
+               "  make 2>&1 | nolinemap        # pipe mode\n"
+               "also installed under the alias noerr")
     parser.add_argument("-L", dest="fmt", metavar="fmt", default=None,
                         help="marker format used when tangling "
-                             "(default: %r)" % DEFAULT_FMT)
+                             "(default: %s)"
+                             % DEFAULT_FMT.replace("%", "%%"))
     parser.add_argument("-c", dest="leader", metavar="leader",
                         default=None,
                         help="marker comment leader (default: '#')")
@@ -713,6 +755,171 @@ for thread in pumps:
 for thread in pumps:
     thread.join()
 return process.wait()
+@
+
+
+\section{Manual pages}
+
+The manual pages tangle from this same document, so the reference
+documentation lives next to the code it describes and travels with it
+through every change.  They are committed like the tangled scripts,
+and installed only when the [[MAN]] variable is passed to
+\emph{make install}---the stock [[contrib/Makefile]] passes only
+[[LIB]], so installation of the pages is opt-in.  The alias gets no
+page of its own; the Makefile links [[noerr.1]] to [[nolinemap.1]],
+mirroring how the main tree links \emph{noweave.1} to
+\emph{notangle.1}.
+
+<<linemark.1>>=
+.TH LINEMARK 1 "" "noweb contrib"
+.SH NAME
+linemark \- insert source-location comments into noweb code chunks
+.SH SYNOPSIS
+.B notangle
+\fB\-filter\fP '\fBlinemark\fP
+[\fB\-L\fP \fIfmt\fP]
+[\fB\-c\fP \fIleader\fP]'
+\fIfile\fP ...
+.SH DESCRIPTION
+.I linemark
+is a
+.IR noweb (1)
+filter that inserts a comment line, by default
+.BR "# %L \(dq%F\(dq" ,
+wherever the tangled output jumps to a different place in the noweb
+source: at the start of every code chunk and after every line that
+uses another chunk.
+Tangle
+.I without
+the
+.B \-L
+option and indentation is preserved, which makes the filter suitable
+for indentation-sensitive languages such as Python, for which
+.B notangle \-L
+produces broken output.
+Comment-only lines are exempt from Python's indentation rules, so the
+inserted lines are harmless.
+Use
+.IR nolinemap (1)
+to translate tool messages that point into the tangled files back to
+the noweb sources.
+.SH OPTIONS
+.TP
+.B \-L \fIfmt\fP
+Set the marker format.
+.B %L
+expands to the source line number,
+.B %F
+to the source file name, and
+.B %%
+to a percent sign; these are the escapes of
+.BR "notangle \-L" ,
+except that
+.B %N
+is not supported, because a marker is always exactly one line.
+The default is
+.BR "# %L \(dq%F\(dq" .
+.TP
+.B \-c \fIleader\fP
+Use
+.I leader
+as the comment leader in the default format:
+.B \-c //
+gives
+.BR "// %L \(dq%F\(dq" .
+When both options are given,
+.B \-L
+wins.
+.TP
+.B \-h, \-\-help
+Print a help message and exit.
+.SH EXAMPLE
+.nf
+notangle -Rfoo.py -filter linemark foo.nw > foo.py
+nolinemap python3 foo.py
+.fi
+.SH BUGS
+A chunk used mid-expression (with non-whitespace to the left of the
+chunk reference on the line) gets the used chunk's first marker glued
+into that output line, corrupting the code.
+Statement-position uses, the only idiomatic kind in Python, are
+unaffected.
+.SH SEE ALSO
+.IR nolinemap (1),
+.IR notangle (1)
+.SH AUTHOR
+Daniel Bosk <daniel@bosk.se>
+@
+
+<<nolinemap.1>>=
+.TH NOLINEMAP 1 "" "noweb contrib"
+.SH NAME
+nolinemap \- map messages about tangled files back to noweb sources
+.SH SYNOPSIS
+.B nolinemap
+[\fB\-L\fP \fIfmt\fP]
+[\fB\-c\fP \fIleader\fP]
+[\fB\-\-\fP]
+[\fIcommand\fP [\fIarg\fP ...]]
+.SH DESCRIPTION
+.I nolinemap
+reads the output of a compiler, interpreter, linter, or any other
+tool, finds references to files tangled by
+.IR notangle (1),
+and rewrites them so that they point into the noweb sources, using
+the location comments inserted by the
+.IR linemark (1)
+filter.
+It also understands #line directives, so it serves
+.B notangle \-L
+output as well.
+It recognizes Python tracebacks and \fIfile\fP:\fIline\fP[:\fIcolumn\fP]
+references; columns are translated too, by comparing the indentation
+of the tangled line and its source line.
+References to files that do not exist or contain no markers pass
+through untouched.
+.PP
+With a
+.IR command ,
+nolinemap runs it, translates both its standard output and standard
+error, and exits with the command's exit status, so it can wrap
+commands in a Makefile transparently.
+Without one it translates standard input, for use in a pipe.
+.PP
+nolinemap is also installed under the alias
+.IR noerr ,
+after the older Perl program it supersedes.
+.SH OPTIONS
+.TP
+.B \-L \fIfmt\fP
+The marker format that was used when tangling; see
+.IR linemark (1).
+The default is
+.BR "# %L \(dq%F\(dq" .
+.TP
+.B \-c \fIleader\fP
+The comment leader that was given to
+.B linemark \-c
+when tangling.
+.TP
+.B \-h, \-\-help
+Print a help message and exit.
+.SH EXAMPLES
+.nf
+notangle -Rfoo.py -filter linemark foo.nw > foo.py
+nolinemap python3 foo.py
+make 2>&1 | nolinemap
+.fi
+.SH BUGS
+A hand-written comment that happens to match the marker format
+exactly is indistinguishable from a marker and skews the mapping
+until the next real marker.
+Column translation counts a tab as one column.
+.SH SEE ALSO
+.IR linemark (1),
+.IR notangle (1)
+.SH AUTHOR
+Daniel Bosk <daniel@bosk.se>
 @
 
 
