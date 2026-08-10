@@ -1,0 +1,778 @@
+\section{Introduction}
+
+The [[-L]] option of [[notangle]] makes compilers report errors in
+terms of the [[.nw]] source instead of the tangled output.  It comes
+with a documented guarantee: text appears in the same \emph{column} in
+input and output, so that column numbers stay accurate too.  To honor
+that guarantee, [[nt]] must not indent expanded chunks
+(see the chunk \emph{print a string} in [[src/c/modules.nw]]), so all
+indentation from chunk uses is lost.  For languages like Python, where
+indentation is syntax, [[-L]] therefore produces broken programs.
+This is not a bug to fix in [[notangle]]---the column guarantee is
+useful for the languages [[-L]] was designed for---so this document
+takes the approach suggested in issue~41 of the noweb repository:
+leave [[-L]] alone and provide two small companion tools.
+
+\begin{description}
+\item[linemark] A noweb filter that inserts a formal comment, for
+  example [[# 42 "foo.nw"]], wherever the tangled output jumps to a
+  different place in the [[.nw]] source.  We then tangle
+  \emph{without} [[-L]], so indentation survives.  Comment-only lines
+  are exempt from Python's indentation rules, so the inserted lines
+  are harmless.
+\item[nolinemap] A companion program that reads the output of any
+  tool that refers to tangled files---a compiler, an interpreter, a
+  linter, an editor's quickfix stream---finds the file/line
+  references, and rewrites them to point into the [[.nw]] source,
+  using the comments that [[linemark]] inserted.  It also understands
+  the [[#line]] directives produced by [[notangle -L]] itself, so it
+  can serve languages with real [[#line]] support, too.  Where the
+  message carries a column number, [[nolinemap]] also translates the
+  column.  It is also installed under the alias [[noerr]], after the
+  older program it supersedes.
+\end{description}
+
+A typical session looks like this:
+
+\begin{verbatim}
+notangle -filter linemark example.nw > example.py
+nolinemap python3 example.py
+\end{verbatim}
+
+The first command tangles with location comments; the second runs the
+program and rewrites any traceback so that it points into
+[[example.nw]].  [[nolinemap]] exits with the wrapped command's exit
+status, so both commands can go into a Makefile unchanged.
+
+\subsection{Naming}
+
+The names went through some deliberation, recorded here so the
+trade-offs need not be rediscovered.  The guiding observation is that
+the two tools do different things to the same information: the filter
+\emph{marks} lines, the companion \emph{maps} them back.  Names
+should not cross those roles.
+
+\begin{description}
+\item[nolinemap + noerr] The first draft.  \emph{noerr} is short,
+  purpose-evocative, in the [[no]]* family, and honors
+  Sven~K\"onig's original tool.  But it undersells the program: the
+  translation is useful to anything that consumes locations in
+  tangled files---linters, editor quickfix parsing, vim
+  plugins---not just error messages, and \emph{noerr} can even be
+  misread as \emph{suppressing} errors.  Worse, naming the
+  \emph{filter} \emph{nolinemap} crossed the roles: the filter does
+  not map anything.
+\item[nolinemap + noremap] Rejected: \emph{noremap} is one of the
+  most-typed vim commands in existence, hopeless to search for, and
+  the [[no]]-pun reads as a negation---\emph{don't remap}---the
+  opposite of what the tool does.
+\item[nolinemark + nolinemap] Semantically right, and pretty as a
+  pair, but the names differ in one letter: tab completion never
+  disambiguates, and a typo swaps the tools.  That slip fails
+  \emph{silently}: the mapper, run as a [[-filter]], passes the
+  pipeline markup through mostly unchanged, so the tangle succeeds
+  with no markers in it.
+\item[linemark + nolinemap] Chosen.  Filters in the core tree are
+  unprefixed ([[sharpline]], [[emptydefn]]); the [[no]]* names are
+  the commands people type.  \emph{linemark} says what the filter
+  does and sits next to its closest relative, [[sharpline]];
+  \emph{nolinemap} names the mechanism---mapping lines---which is
+  honest about serving more than error messages.  \emph{noerr}
+  survives as an alias, for fingers and Makefiles that remember it.
+\end{description}
+
+
+\section{The marker contract}
+
+Both tools agree on one \emph{marker format}, by default
+
+\begin{verbatim}
+# %L "%F"
+\end{verbatim}
+
+where [[%L]] expands to a line number and [[%F]] to a file name (and
+[[%%]] to a literal percent sign).  These are the same escapes
+[[notangle -L]] uses, minus [[%N]]: a marker is always exactly one
+line, so no explicit newline is ever needed.  A marker asserts:
+\emph{the next line of this file came from line [[%L]] of file
+[[%F]]}.
+
+The filter inserts a marker at every \emph{discontinuity}: at the
+start of each code chunk's definition, and after every line that uses
+another chunk.  Everything between two consecutive markers is a run
+of lines copied verbatim from consecutive lines of the [[.nw]]
+file---so [[nolinemap]] can map any tangled line~$T$ by finding the last
+marker at some line $M \le T$ pointing at source line~$S$, and
+computing $S + (T - M - 1)$.  This contract is what makes the two
+programs correct together; everything else is bookkeeping.
+
+The line numbers themselves come from the noweb pipeline
+representation.  [[markup]] emits one [[@nl]] for every newline of
+the source file---documentation, code, and the [[<<name>>=]] line
+alike---so a filter can recover the current source line by counting.
+Filters earlier in the pipeline may also inject [[@line n]] (meaning:
+the next line came from source line $n$) and [[@file f]]; we honor
+both, exactly like [[nt]] does, so [[linemark]] composes with
+filters like [[sharpline]].
+
+
+\section{The filter: linemark}
+
+[[linemark]] is a shell script wrapping an awk program, like most
+noweb filters.  It reads the pipeline representation on standard
+input and writes it, with markers inserted, on standard output.
+
+<<linemark>>=
+#!/bin/sh
+#
+# linemark [-L fmt] [-c leader] -- insert source-location comments
+# into code chunks, so that the output of notangle (without -L!) can
+# be mapped back to the .nw source by nolinemap.  See nolinemap.nw.
+#
+# sample usage:
+#   notangle -filter linemark foo.nw > foo.py
+
+<<parse the linemark command line>>
+<<choose an awk implementation>>
+LINEMARK_FMT="$fmt" "$AWK" '
+BEGIN { fmt = ENVIRON["LINEMARK_FMT"]; lineno = 1 }
+<<function [[marker]] expands [[fmt]] and emits the comment>>
+<<rules: [[@file]] and [[@line]] set the source location>>
+<<rules: [[@begin code]] and [[@end code]] delimit chunks>>
+<<rules: [[@defn]] and [[@use]] arm a marker>>
+<<rules: [[@nl]] counts lines and schedules pending markers>>
+<<rules: [[@text]] discharges a pending marker>>
+{ print }
+' "$@"
+@ %def linemark
+
+\subsection{The command line}
+
+The full marker format is set with [[-L]], named after the
+[[notangle]] option it replaces.  Often the only thing that varies
+between languages is the comment leader, so [[-c]] provides a
+shortcut: [[-c //]] yields the format [[// %L "%F"]].  When both are
+given, [[-L]] wins, since it is the more explicit of the two.  Both
+options accept the argument either as a separate word or glued to the
+option, the latter for symmetry with [[notangle -L'...']].
+
+<<parse the linemark command line>>=
+fmt=
+leader='#'
+while [ $# -gt 0 ]
+do
+  case "$1" in
+    -L)   [ $# -ge 2 ] ||
+            { echo "linemark: option -L needs an argument" 1>&2; exit 1; }
+          fmt="$2"; shift 2 ;;
+    -L?*) fmt="${1#-L}"; shift ;;
+    -c)   [ $# -ge 2 ] ||
+            { echo "linemark: option -c needs an argument" 1>&2; exit 1; }
+          leader="$2"; shift 2 ;;
+    -c?*) leader="${1#-c}"; shift ;;
+    --)   shift; break ;;
+    -*)   echo "linemark: unknown option $1" 1>&2; exit 1 ;;
+    *)    break ;;
+  esac
+done
+[ -n "$fmt" ] || fmt="$leader"' %L "%F"'
+@
+
+The format is handed to awk through the environment rather than with
+[[awk -v]]: POSIX awk applies C escape processing to [[-v]] values,
+which would corrupt any format containing a backslash.  [[ENVIRON]]
+delivers the string untouched.
+
+The [[awkname]] script that rewrites [[nawk]] to the locally
+configured awk does not visit [[contrib]], so the wrapper picks its
+own implementation: it honors [[$AWK]] if set, prefers [[nawk]], and
+falls back to plain [[awk]].
+
+<<choose an awk implementation>>=
+AWK="${AWK-nawk}"
+command -v "$AWK" >/dev/null 2>&1 || AWK=awk
+@
+
+\subsection{Expanding the format}
+
+[[marker]] expands the format with the current location and emits it
+as an [[@text]] line followed by [[@nl]].  Both lines are printed
+directly, bypassing the line-counting rule below, because they do not
+correspond to any line of the source file.  Unknown escapes are
+passed through unchanged, so that a format meant for a future version
+degrades visibly instead of silently.
+
+<<function [[marker]] expands [[fmt]] and emits the comment>>=
+function marker(    out, i, c) {
+  out = ""
+  for (i = 1; i <= length(fmt); i++) {
+    c = substr(fmt, i, 1)
+    if (c == "%" && i < length(fmt)) {
+      i++; c = substr(fmt, i, 1)
+      if (c == "L")      out = out lineno
+      else if (c == "F") out = out file
+      else if (c == "%") out = out "%"
+      else               out = out "%" c
+    } else out = out c
+  }
+  print "@text " out
+  print "@nl"
+  pending = 0
+}
+@ %def marker
+
+\subsection{Tracking the source location}
+
+The counter [[lineno]] always holds the number of the source line
+currently being read; it is advanced by that line's terminating
+[[@nl]].  [[@file]] restarts the count for a new file.  [[@line n]]
+declares that the \emph{next} line is line $n$; because our counter
+is incremented only when the following [[@nl]] arrives, storing $n$
+directly gives that next line the right number.  ([[nt]] uses the
+same convention but increments eagerly, which is why \emph{it} has to
+decrement after [[@line]]; see [[src/c/notangle.nw]].)
+
+<<rules: [[@file]] and [[@line]] set the source location>>=
+/^@file /       { file = substr($0, 7); lineno = 1; print; next }
+/^@line /       { lineno = $2 + 0; print; next }
+@
+
+\subsection{Inserting markers}
+
+Markers are inserted \emph{lazily}.  Rather than emitting a marker
+the moment a chunk begins, we only note that one is [[pending]] and
+emit it just before the next piece of chunk content.  Laziness buys
+two properties that eager insertion lacks: a chunk that has no
+content produces no output at all (an empty chunk stays empty), and a
+chunk whose last line uses another chunk does not end with a dangling
+marker that points past its own end.
+
+Two events arm a marker.  The first is the start of a chunk
+definition.  We must not glue a marker onto the [[<<name>>=]] line
+itself, so [[@defn]] only raises [[afterdefn]]; the [[@nl]] that
+terminates the definition line converts it into [[pending]].  The
+second is a chunk use: once the line containing the [[@use]] ends,
+the tangled output will have detoured through the used chunk, so the
+following content needs re-anchoring.  A [[@use]] also discharges any
+marker already pending, since a use is chunk content in its own
+right.
+
+<<rules: [[@begin code]] and [[@end code]] delimit chunks>>=
+/^@begin code / { code = 1; print; next }
+/^@end code /   { code = 0; afterdefn = 0; sawuse = 0; pending = 0
+                  print; next }
+@
+
+<<rules: [[@defn]] and [[@use]] arm a marker>>=
+/^@defn /       { afterdefn = 1; print; next }
+/^@use /        { if (code && pending) marker()
+                  if (code) sawuse = 1; print; next }
+@
+
+The newline rule does three jobs, in an order that matters.  A
+pending marker is flushed \emph{before} the [[@nl]] is printed, so
+that a blank line at the start of a chunk body still ends up below
+the marker that describes it.  Then the line counter advances.  Only
+then is a new marker armed, so that the marker's eventual line number
+is that of the line \emph{after} the definition or use line.  Both
+[[@nl]] and [[@index nl]] count, because [[nt]] counts both.  Lines
+with several uses arm [[sawuse]] several times but the terminating
+[[@nl]] converts it just once, so such a line gets exactly one
+marker.
+
+<<rules: [[@nl]] counts lines and schedules pending markers>>=
+/^(@nl|@index nl)$/ {
+  if (code && pending) marker()
+  print
+  lineno++
+  if (code && (afterdefn || sawuse)) { pending = 1; afterdefn = 0; sawuse = 0 }
+  next
+}
+@
+
+Ordinary text discharges a pending marker and passes through.  Text
+in documentation chunks is never preceded by a pending marker because
+[[pending]] is only ever set while [[code]] is~1, but the guard keeps
+the invariant local and obvious.
+
+<<rules: [[@text]] discharges a pending marker>>=
+/^@text /       { if (code && pending) marker(); print; next }
+@
+
+
+\section{The mapper: nolinemap}
+
+[[nolinemap]] undoes at reporting time what tangling did at build
+time.  It is written in Python~3 (using only the standard library):
+unlike the filter, it juggles several regular expressions with
+captures, caches parsed files, and does column arithmetic, all of
+which are painful in awk.  Python is only needed when tool output is
+being translated, never to tangle or weave, so the dependency is
+soft.
+
+The idea comes from an old Perl program by Sven~K\"onig called
+\emph{noerr}, which translated [[notangle -L]] output for languages
+such as Java.  This program supersedes it---it understands both
+comment markers and [[#line]] directives, recognizes Python
+tracebacks in addition to \emph{file:line} messages, translates
+columns, and can run the failing command itself---and it is installed
+under the alias [[noerr]] as well, in its memory.
+
+<<nolinemap>>=
+#!/usr/bin/env python3
+"""Translate messages that point into files tangled by noweb so
+that they point into the .nw sources instead.
+
+Usage: nolinemap [-L fmt] [-c leader] [--] [command arg ...]
+
+With a command, run it, translate its output, and exit with its exit
+status.  Without one, translate standard input.  See nolinemap.nw.
+"""
+
+<<imports>>
+
+<<constants>>
+
+<<functions>>
+
+<<classes>>
+
+if __name__ == "__main__":
+    sys.exit(main())
+@ %def nolinemap
+
+<<imports>>=
+import argparse
+import bisect
+import os
+import re
+import subprocess
+import sys
+import threading
+@
+
+\subsection{Recognizing markers}
+
+The marker format is compiled into a regular expression: literal
+characters are escaped, [[%L]] becomes a capture of digits, [[%F]] a
+capture of anything, and [[%%]] a literal percent sign.  The
+expression tolerates leading blanks because [[nt]] prefixes every
+line of an expanded chunk---markers included---with the indentation
+of the use site.  Trailing blanks are tolerated for robustness.  A
+format without [[%L]] cannot express a line number and is rejected
+outright; a format without [[%F]] is allowed and simply yields
+markers that name no file, in which case [[noerr]] keeps the tangled
+file's name and translates only line numbers.
+
+<<functions>>=
+def fmt_to_regex(fmt):
+    """Compile a marker format such as '# %L "%F"' to a regex."""
+    parts = [r"^[ \t]*"]
+    has_line = False
+    i = 0
+    while i < len(fmt):
+        c = fmt[i]
+        if c == "%" and i + 1 < len(fmt):
+            escape = fmt[i + 1]
+            if escape == "L":
+                parts.append(r"(?P<line>\d+)")
+                has_line = True
+                i += 2
+                continue
+            if escape == "F":
+                parts.append(r"(?P<file>.*?)")
+                i += 2
+                continue
+            if escape == "%":
+                parts.append(re.escape("%"))
+                i += 2
+                continue
+        parts.append(re.escape(c))
+        i += 1
+    parts.append(r"[ \t\r]*$")
+    if not has_line:
+        raise SystemExit("nolinemap: marker format lacks %L: " + fmt)
+    return re.compile("".join(parts))
+@ %def fmt_to_regex
+
+Whatever format the user gives, two built-in patterns are always
+tried as well: the C preprocessor's [[#line n "file"]] and its short
+form [[# n "file"]].  These are what [[notangle -L]] emits by
+default, so [[nolinemap]] works out of the box for [[-L]]-tangled
+languages, with no filter involved.
+
+<<constants>>=
+DEFAULT_FMT = '# %L "%F"'
+BUILTIN_MARKERS = [
+    re.compile(r'^[ \t]*#[ \t]*line[ \t]+(?P<line>\d+)[ \t]+"(?P<file>[^"]*)"'),
+    re.compile(r'^[ \t]*#[ \t]+(?P<line>\d+)[ \t]+"(?P<file>[^"]*)"'),
+]
+@ %def DEFAULT_FMT BUILTIN_MARKERS
+
+\subsection{Mapping a tangled file}
+
+A [[SourceMap]] is the parsed form of one tangled file: its lines
+(kept for column translation) and its markers, each recorded as the
+tangled line it sits on plus the source line and file it points at.
+The marker lists are kept sorted by construction---we scan the file
+top to bottom---so lookup can bisect.
+
+<<classes>>=
+class SourceMap:
+    """The location markers found in one tangled file."""
+
+    def __init__(self, path, lines, markers):
+        self.dir = os.path.dirname(path)
+        self.lines = lines
+        self.points = [m[0] for m in markers]
+        self.targets = [(m[1], m[2]) for m in markers]
+
+    <<sourcemap methods>>
+@ %def SourceMap
+
+Resolution implements the contract from the start of this document:
+the last marker at or above the queried line anchors a run of
+verbatim lines, so the source line is the marker's target plus the
+distance from the marker.  A query \emph{on} a marker line itself
+maps to the marker's target: the marker is not a source line, and its
+target is the nearest sensible answer.  A query above the first
+marker has no anchor and returns [[None]], which the caller treats as
+untranslatable.
+
+<<sourcemap methods>>=
+def resolve(self, lineno):
+    """Map tangled line `lineno` to (source file, source line).
+
+    The source file is None when the markers name no file.
+    Returns None when `lineno` lies before the first marker.
+    """
+    i = bisect.bisect_right(self.points, lineno) - 1
+    if i < 0:
+        return None
+    marker_line = self.points[i]
+    src_line, src_file = self.targets[i]
+    if lineno == marker_line:
+        return (src_file, src_line)
+    return (src_file, src_line + (lineno - marker_line - 1))
+@ %def resolve
+
+For column translation we also need the raw text of a tangled line.
+
+<<sourcemap methods>>=
+def line_text(self, lineno):
+    """Return the text of tangled line `lineno`, or None."""
+    if 1 <= lineno <= len(self.lines):
+        return self.lines[lineno - 1]
+    return None
+@ %def line_text
+
+\subsection{The translator}
+
+The [[Translator]] holds the compiled marker patterns and two caches:
+parsed tangled files and the line lists of [[.nw]] sources.  Caching
+matters because a single traceback mentions the same file many times,
+and [[noerr]] may sit in a long-running pipe.
+
+<<classes>>=
+class Translator:
+    """Rewrite file/line references using cached source maps."""
+
+    def __init__(self, marker_regexes):
+        self.marker_regexes = marker_regexes
+        self.maps = {}
+        self.nw_cache = {}
+
+    <<translator methods>>
+@ %def Translator
+
+A file mentioned in an error message earns a [[SourceMap]] only if it
+exists, is readable, and contains at least one marker.  Everything
+else maps to [[None]], which makes references to it pass through
+untranslated---this is the guard that keeps [[nolinemap]] from mangling
+messages about files it knows nothing about (or random
+\emph{word:number} text that merely looks like a file reference).
+
+<<translator methods>>=
+def get_map(self, path):
+    """Return the SourceMap for `path`, or None."""
+    if path not in self.maps:
+        self.maps[path] = self.build_map(path)
+    return self.maps[path]
+
+def build_map(self, path):
+    """Parse `path` for markers; None if absent, unreadable, bare."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return None
+    markers = []
+    for lineno, text in enumerate(lines, start=1):
+        for regex in self.marker_regexes:
+            match = regex.match(text)
+            if match:
+                src_file = match.groupdict().get("file") or None
+                markers.append((lineno, int(match.group("line")), src_file))
+                break
+    if not markers:
+        return None
+    return SourceMap(path, lines, markers)
+@ %def get_map build_map
+
+\subsection{Translating columns}
+
+Tangling without [[-L]] preserves lines verbatim except for one
+thing: [[nt]] prepends the use site's indentation to every line of an
+expanded chunk.  A column in the tangled file is therefore off by
+exactly the difference in leading whitespace between the tangled line
+and its source line.  Both lines are at hand---the tangled one in the
+[[SourceMap]], the source one in the [[.nw]] file---so the shift
+costs one subtraction.  When the [[.nw]] file cannot be read (for
+example because the compiler ran in another directory), the line
+number is still translated and the column is simply left alone; a
+slightly-off column is better than no translation at all.  Tabs count
+as one column each, which is also how Python and gcc count them.
+
+The [[.nw]] path recorded in a marker is resolved like the compiler
+message's own paths: first as given, then relative to the directory
+of the tangled file, which covers the common case of a build that
+[[cd]]s somewhere else.
+
+<<translator methods>>=
+def nw_line(self, path, hint_dir, lineno):
+    """Return line `lineno` of .nw file `path`, or None."""
+    for candidate in (path, os.path.join(hint_dir, path)):
+        if candidate not in self.nw_cache:
+            try:
+                with open(candidate, encoding="utf-8",
+                          errors="replace") as f:
+                    self.nw_cache[candidate] = f.read().splitlines()
+            except OSError:
+                self.nw_cache[candidate] = None
+        lines = self.nw_cache[candidate]
+        if lines is not None:
+            if 1 <= lineno <= len(lines):
+                return lines[lineno - 1]
+            return None
+    return None
+
+def shift_column(self, smap, tangled_line, nw_file, nw_line, column):
+    """Shift `column` by the indentation difference of the lines."""
+    tangled = smap.line_text(tangled_line)
+    source = self.nw_line(nw_file, smap.dir, nw_line) \
+        if nw_file else None
+    if tangled is None or source is None:
+        return column
+    def indentation(text):
+        return len(text) - len(text.lstrip(" \t"))
+    return max(1, column + indentation(source) - indentation(tangled))
+@ %def nw_line shift_column
+
+\subsection{Recognizing error messages}
+
+Two shapes of location reference cover most tools.  Python tracebacks
+put the location on a line of its own, [[File "f", line n]], possibly
+followed by [[, in name]]; that line is matched as a whole and
+rebuilt around the translated location.  Nearly everything
+else---gcc, clang, shells, linkers, linters---writes
+\emph{file:line} or \emph{file:line:column} somewhere in the message,
+which is handled by substitution so that any number of references per
+line are translated and the rest of the message is preserved
+byte for byte.
+
+<<constants>>=
+PYTHON_RE = re.compile(r'^(?P<pre>\s*File ")(?P<file>[^"]+)'
+                       r'(?P<mid>", line )(?P<line>\d+)(?P<rest>.*)$')
+COLON_RE = re.compile(r'(?P<file>[A-Za-z0-9_.+/-]+):(?P<line>\d+)'
+                      r'(?::(?P<col>\d+))?')
+@ %def PYTHON_RE COLON_RE
+
+<<translator methods>>=
+def translate(self, line):
+    """Rewrite all translatable references in one message line."""
+    match = PYTHON_RE.match(line)
+    if match:
+        resolved = self.resolve(match.group("file"),
+                                int(match.group("line")))
+        if resolved is None:
+            return line
+        nw_file, nw_lineno = resolved
+        return (match.group("pre") + nw_file + match.group("mid")
+                + str(nw_lineno) + match.group("rest"))
+    return COLON_RE.sub(self.colon_reference, line)
+
+def resolve(self, path, lineno):
+    """Map `path`:`lineno` to (nw file, nw line), or None."""
+    smap = self.get_map(path)
+    if smap is None:
+        return None
+    resolved = smap.resolve(lineno)
+    if resolved is None:
+        return None
+    nw_file, nw_lineno = resolved
+    return (nw_file or path, nw_lineno)
+
+def colon_reference(self, match):
+    """Translate one file:line[:column] match."""
+    path = match.group("file")
+    lineno = int(match.group("line"))
+    resolved = self.resolve(path, lineno)
+    if resolved is None:
+        return match.group(0)
+    nw_file, nw_lineno = resolved
+    result = "%s:%d" % (nw_file, nw_lineno)
+    if match.group("col") is not None:
+        column = self.shift_column(self.get_map(path), lineno,
+                                   nw_file, nw_lineno,
+                                   int(match.group("col")))
+        result += ":%d" % column
+    return result
+@ %def translate resolve colon_reference
+
+\subsection{Pumping streams}
+
+One pump copies one stream, translating line by line and flushing
+after each line so that output appears as the wrapped command
+produces it, not after it exits.  Line endings are preserved as
+found.
+
+<<functions>>=
+def pump(src, dst, translator):
+    """Copy `src` to `dst`, translating each line."""
+    for raw in src:
+        line = raw.rstrip("\r\n")
+        ending = raw[len(line):]
+        dst.write(translator.translate(line) + ending)
+        dst.flush()
+@ %def pump
+
+\subsection{The main program}
+
+Options mirror [[linemark]]'s: [[-L]] gives the exact marker format
+that was used when tangling, [[-c]] just the comment leader, and with
+neither the default matches [[linemark]]'s default, so the common
+case needs no options at all.  Everything after the options is a
+command to run; without one, [[nolinemap]] filters standard input,
+for use as [[make 2>&1 | nolinemap]].
+
+In command mode the child's standard output and standard error are
+both translated---compilers split their messages between the two
+streams inconsistently---and kept apart, each on its own thread so
+that neither stream can fill its pipe and deadlock the child.
+[[nolinemap]] exits with the child's exit status, so wrapping a
+command in a Makefile does not change what make sees.
+
+<<functions>>=
+def main():
+    """Run nolinemap; return the exit status."""
+    parser = argparse.ArgumentParser(
+        prog="nolinemap",
+        description="Translate messages pointing into tangled files "
+                    "so that they point into the .nw sources.")
+    parser.add_argument("-L", dest="fmt", metavar="fmt", default=None,
+                        help="marker format used when tangling "
+                             "(default: %r)" % DEFAULT_FMT)
+    parser.add_argument("-c", dest="leader", metavar="leader",
+                        default=None,
+                        help="marker comment leader (default: '#')")
+    parser.add_argument("command", nargs=argparse.REMAINDER,
+                        help="command to run and translate; "
+                             "default: translate standard input")
+    args = parser.parse_args()
+    if args.fmt is not None:
+        fmt = args.fmt
+    elif args.leader is not None:
+        fmt = args.leader + ' %L "%F"'
+    else:
+        fmt = DEFAULT_FMT
+    translator = Translator([fmt_to_regex(fmt)] + BUILTIN_MARKERS)
+    command = args.command
+    if command and command[0] == "--":
+        command = command[1:]
+    if not command:
+        pump(sys.stdin, sys.stdout, translator)
+        return 0
+    <<run [[command]] and translate its streams>>
+@ %def main
+
+<<run [[command]] and translate its streams>>=
+try:
+    process = subprocess.Popen(command, stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE, text=True)
+except OSError as error:
+    sys.stderr.write("nolinemap: %s: %s\n" % (command[0], error))
+    return 127
+pumps = [
+    threading.Thread(target=pump,
+                     args=(process.stdout, sys.stdout, translator)),
+    threading.Thread(target=pump,
+                     args=(process.stderr, sys.stderr, translator)),
+]
+for thread in pumps:
+    thread.start()
+for thread in pumps:
+    thread.join()
+return process.wait()
+@
+
+
+\section{Testing}
+
+The Makefile's [[test]] target exercises the whole round trip on the
+committed fixture [[example.nw]].  The fixture defines a root chunk
+that calls a second chunk which raises; the interesting line numbers
+are line~13 (the [[raise]]) and line~8 (the call to [[f]]).  Tangling
+with the filter,
+
+\begin{verbatim}
+notangle -Rexample.py -filter ./linemark example.nw > example.py
+\end{verbatim}
+
+yields
+
+\begin{verbatim}
+# 5 "example.nw"
+def f():
+    # 13 "example.nw"
+    raise ValueError("expect example.nw line 13")
+# 7 "example.nw"
+
+f()
+\end{verbatim}
+
+Note that the indentation is intact and that each marker starts a run
+of verbatim source lines.  The marker for line~13 is indented because
+[[nt]] prefixes every line of an expanded chunk with the use site's
+indentation; the marker for line~7 is a line of the outer chunk
+itself and stays in column~1.  Python accepts both, since comment-only
+lines are exempt from its indentation rules.  Python reports the error at
+[[example.py]] lines 7 and~4; the test asserts that
+
+\begin{verbatim}
+./nolinemap python3 example.py
+\end{verbatim}
+
+reports them as [[example.nw]] lines 8 and~13 instead.  When
+[[python3]] is not installed the run is skipped with a note, so the
+rest of the contrib tree still builds.
+
+
+\section{Limitations}
+
+\begin{description}
+\item[Mid-expression uses] A chunk used with non-whitespace to its
+  left on the line, as in [[x = (<<expr>>)]], gets the used chunk's
+  first marker glued into that output line, corrupting the code.
+  Statement-position uses---the only idiomatic kind in
+  Python---are unaffected.  ([[notangle -L]] shares this class of
+  problem: it must break such lines to emit its directive.)
+\item[Marker look-alikes] A hand-written comment that happens to
+  match the marker format exactly, such as [[# 5 "foo.nw"]], is
+  indistinguishable from a marker and will skew the mapping of the
+  lines that follow it, until the next real marker.
+\item[Line-oriented only] Markers are whole lines, so [[%N]] is not
+  supported in formats, and languages without single-line comments
+  cannot use the filter.
+\item[Tabs] Column translation counts a tab as one column, matching
+  Python and gcc.
+\end{description}
