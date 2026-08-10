@@ -1,0 +1,14 @@
+This example program raises an error so that we can check that
+[[nolinemap]] maps the traceback back to this file.
+
+<<example.py>>=
+def f():
+    <<raise an error>>
+
+f()
+@
+
+The error itself lives in its own chunk:
+<<raise an error>>=
+raise ValueError("expect example.nw line 13")
+@
