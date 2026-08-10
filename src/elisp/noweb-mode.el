@@ -145,6 +145,18 @@ and NOWEB-ELECTRIC-<, respectively.")
 (defvar noweb-mode nil
   "Buffer local variable, T iff this buffer is edited in noweb mode.")
 
+;; Invariant: these functions, rather than their entire hook variables, survive
+;; the major-mode changes performed by `noweb-select-mode'.  Making a standard
+;; hook such as `post-command-hook' permanently local preserves unrelated
+;; callbacks too, and adding to a local hook without LOCAL can accidentally
+;; modify the global hook value when that local value contains t.
+(dolist (function '(noweb-post-command-hook
+                    noweb-auto-fill-doc-mode
+                    noweb-auto-fill-code-mode
+                    noweb-note-isearch-mode
+                    noweb-note-isearch-mode-end))
+  (put function 'permanent-local-hook t))
+
 (if (not (assq 'noweb-mode minor-mode-alist))
     (setq minor-mode-alist (append minor-mode-alist
 				   (list '(noweb-mode " Noweb")))))
@@ -210,19 +222,16 @@ Misc:
 	  '(noweb-mode
 	    noweb-narrowing
 	    noweb-chunk-vector
-	    post-command-hook
-	    isearch-mode-hook
-	    isearch-mode-end-hook
 	    noweb-doc-mode
 	    noweb-code-mode))
   (setq noweb-mode t)
   (noweb-setup-keymap)
   (noweb-update-chunk-vector)
-  (add-hook 'post-command-hook 'noweb-post-command-hook)
-  (add-hook 'noweb-select-doc-mode-hook 'noweb-auto-fill-doc-mode)
-  (add-hook 'noweb-select-code-mode-hook 'noweb-auto-fill-code-mode)
-  (add-hook 'isearch-mode-hook 'noweb-note-isearch-mode)
-  (add-hook 'isearch-mode-end-hook 'noweb-note-isearch-mode-end)
+  (add-hook 'post-command-hook 'noweb-post-command-hook nil t)
+  (add-hook 'noweb-select-doc-mode-hook 'noweb-auto-fill-doc-mode nil t)
+  (add-hook 'noweb-select-code-mode-hook 'noweb-auto-fill-code-mode nil t)
+  (add-hook 'isearch-mode-hook 'noweb-note-isearch-mode nil t)
+  (add-hook 'isearch-mode-end-hook 'noweb-note-isearch-mode-end nil t)
   (run-hooks 'noweb-mode-hook)
   (message "noweb mode: use `M-x noweb-describe-mode' for further information"))
 
@@ -340,17 +349,19 @@ by major mode changes."
 
 (defun noweb-note-isearch-mode ()
   "Take note of an incremental search in progress"
-  (remove-hook 'post-command-hook 'noweb-post-command-hook))
+  (remove-hook 'post-command-hook 'noweb-post-command-hook t))
 
 (defun noweb-note-isearch-mode-end ()
   "Take note of an incremental search having ended"
-  (add-hook 'post-command-hook 'noweb-post-command-hook))
+  (when noweb-mode
+    (add-hook 'post-command-hook 'noweb-post-command-hook nil t)))
 
 (defun noweb-post-command-hook ()
   "The hook being run after each command in noweb mode."
-  (noweb-select-mode)
-  ;; reinstall our keymap if the major mode screwed it up:
-  (noweb-setup-keymap))
+  (when noweb-mode
+    (noweb-select-mode)
+    ;; reinstall our keymap if the major mode screwed it up:
+    (noweb-setup-keymap)))
 
 
 ;;; Chunks
@@ -992,4 +1003,3 @@ and and update the chunk vector."
 ;; Local Variables:
 ;; mode:emacs-lisp
 ;; End:
-
