@@ -97,7 +97,7 @@ line, so no explicit newline is ever needed.  A marker asserts:
 \emph{the next line of this file came from line [[%L]] of file
 [[%F]]}.
 
-The filter inserts a marker at every \emph{discontinuity}: at the
+The filter inserts a marker at every \emph{discontinuity}: near the
 start of each code chunk's definition, and after every line that uses
 another chunk.  Everything between two consecutive markers is a run
 of lines copied verbatim from consecutive lines of the [[.nw]]
@@ -105,6 +105,44 @@ file---so [[nolinemap]] can map any tangled line~$T$ by finding the last
 marker at some line $M \le T$ pointing at source line~$S$, and
 computing $S + (T - M - 1)$.  This contract is what makes the two
 programs correct together; everything else is bookkeeping.
+
+\enquote{Near} the start, not \emph{at} it: the marker for a chunk's
+first definition follows the chunk's \emph{first line}, announcing
+its second.  A marker placed before the first line rides into every
+splice of the chunk, and a chunk used in the \emph{middle} of a
+line---[[if [ <<test>> ]; then]]---would then have the marker land
+inside that line, where the comment leader swallows the rest and the
+forced line break makes the tangle differ from the program notangle
+builds.  Placed after the first line, the marker always falls on a
+line boundary of the tangled program: the splice's first line stays
+whole, anchored to the use line by plain counting, and the chunk's
+remaining lines are anchored exactly by the marker.  The price is
+deliberate: an error on the first line of a used chunk is reported at
+the line that uses the chunk rather than at its definition---still
+the right file, and the definition is one jump away.
+
+A related guard applies at every marker: a line ending in a
+backslash announces, in most of the languages this filter serves,
+that the next physical line continues it, and a comment dropped
+between the two would sever them.  So a pending marker is never
+flushed after a backslash-terminated line; it waits for the next
+safe boundary, and the lines it skipped anchor to the last marker by
+plain counting.  The count is off by the length of the detour when a
+splice intervenes---the honest cost of refusing to break the
+program.  Backslashes are the one continuation form a line-based
+filter can see; a chunk whose first line opens a multi-line string
+remains beyond it (see BUGS in the manual page).
+
+Consumers that post-process the tangled text can do better than
+either compromise: with [[-e]] (\emph{eager}), every chunk gets its
+marker before its first line, exactly as earlier versions of this
+filter placed them, and the backslash guard stands down too---every
+discontinuity is marked, no matter where the marker lands.  A
+mid-line splice then carries the marker inside the broken line, and
+a marker after a continuation line severs it; but a consumer that
+recognizes and repairs both---vim-noweb's shadow buffers relocate
+the former and drop the latter, keeping their announcements for the
+map---recovers both the exact program and an exact map.
 
 The line numbers themselves come from the noweb pipeline
 representation.  [[markup]] emits one [[@nl]] for every newline of
@@ -135,8 +173,9 @@ input and writes it, with markers inserted, on standard output.
 <<the [[usage]] function>>
 <<parse the linemark command line>>
 <<choose an awk implementation>>
-LINEMARK_FMT="$fmt" "$AWK" '
-BEGIN { fmt = ENVIRON["LINEMARK_FMT"]; lineno = 1 }
+LINEMARK_FMT="$fmt" LINEMARK_EAGER="$eager" "$AWK" '
+BEGIN { fmt = ENVIRON["LINEMARK_FMT"]; lineno = 1
+        eager = ENVIRON["LINEMARK_EAGER"] + 0 }
 <<function [[marker]] expands [[fmt]] and emits the comment>>
 <<rules: [[@file]] and [[@line]] set the source location>>
 <<rules: [[@begin code]] and [[@end code]] delimit chunks>>
@@ -164,7 +203,7 @@ expanding anything in it.
 <<the [[usage]] function>>=
 usage() {
   cat <<'EOF'
-usage: linemark [-L fmt] [-c leader]
+usage: linemark [-L fmt] [-c leader] [-e]
 
 noweb filter: insert source-location comments into code chunks, so
 that output of tools running on the tangled files can be mapped back
@@ -174,6 +213,9 @@ is preserved, so it suits languages like Python.
   -L fmt      marker format; %L = line, %F = file, %% = percent
               (default: # %L "%F")
   -c leader   comment leader for the default format (default: #)
+  -e, --eager eager markers: mark the first line of every chunk too,
+              even where that lands a marker inside a spliced line;
+              for consumers that post-process the output
   -h, --help  print this help and exit
 
 sample usage:
@@ -186,6 +228,7 @@ EOF
 <<parse the linemark command line>>=
 fmt=
 leader='#'
+eager=
 while [ $# -gt 0 ]
 do
   case "$1" in
@@ -197,6 +240,7 @@ do
             { echo "linemark: option -c needs an argument" 1>&2; exit 1; }
           leader="$2"; shift 2 ;;
     -c?*) leader="${1#-c}"; shift ;;
+    -e|--eager) eager=1; shift ;;
     -h|--help) usage; exit 0 ;;
     --)   shift; break ;;
     -*)   echo "linemark: unknown option $1" 1>&2; usage 1>&2; exit 1 ;;
@@ -276,25 +320,47 @@ chunk whose last line uses another chunk does not end with a dangling
 marker that points past its own end.
 
 Two events arm a marker.  The first is the start of a chunk
-definition.  We must not glue a marker onto the [[<<name>>=]] line
-itself, so [[@defn]] only raises [[afterdefn]]; the [[@nl]] that
-terminates the definition line converts it into [[pending]].  The
-second is a chunk use: once the line containing the [[@use]] ends,
-the tangled output will have detoured through the used chunk, so the
-following content needs re-anchoring.  A [[@use]] also discharges any
-marker already pending, since a use is chunk content in its own
-right.
+definition, where placement depends on whether the definition is the
+chunk's first or a continuation of an already-seen name.  A
+continuation always begins on a fresh line of the tangled output (it
+follows the previous definition's final newline), so its marker can
+safely precede its first line: [[@defn]] raises [[afterdefn]], and
+the [[@nl]] terminating the [[<<name>>=]] line converts it into
+[[pending]]---never gluing a marker onto the definition line itself.
+A \emph{first} definition is the one that gets spliced at use sites,
+so its marker must follow its first line (see the placement argument
+above): [[@defn]] raises [[firstdef]] instead, the definition line's
+[[@nl]] promotes it, and the [[@nl]] ending the first \emph{content}
+line arms [[pending]]---by then [[lineno]] has advanced to the second
+content line, which is exactly what the marker should announce.  A
+first definition of a single line arms a marker that no content ever
+discharges, and [[@end code]] throws it away: such a chunk needs no
+marker at all, since its whole splice anchors to the use site.
+Under [[-e]] every definition takes the continuation path, restoring
+the eager placement.  The second arming event is a chunk use: once
+the line containing the [[@use]] ends, the tangled output will have
+detoured through the used chunk, so the following content needs
+re-anchoring.  A [[@use]] also discharges any marker already
+pending, since a use is chunk content in its own right.  Flushes
+everywhere are gated on [[contline]], the backslash guard described
+above, unless [[-e]] asked for every marker; and a [[@use]] clears
+[[bs]]: whatever the spliced chunk ends with, it is not a backslash
+we have seen.
 
 <<rules: [[@begin code]] and [[@end code]] delimit chunks>>=
-/^@begin code / { code = 1; print; next }
-/^@end code /   { code = 0; afterdefn = 0; sawuse = 0; pending = 0
-                  print; next }
+/^@begin code / { code = 1; bs = 0; contline = 0; print; next }
+/^@end code /   { code = 0; afterdefn = 0; sawuse = 0; firstdef = 0
+                  pending = 0; print; next }
 @
 
 <<rules: [[@defn]] and [[@use]] arm a marker>>=
-/^@defn /       { afterdefn = 1; print; next }
-/^@use /        { if (code && pending) marker()
-                  if (code) sawuse = 1; print; next }
+/^@defn /       { name = substr($0, 7)
+                  if (eager || (name in seen)) afterdefn = 1
+                  else { seen[name] = 1; firstdef = 1 }
+                  print; next }
+/^@use /        { if (code && pending && (eager || !contline)) marker()
+                  if (code) { sawuse = 1; bs = 0 }
+                  print; next }
 @
 
 The newline rule does three jobs, in an order that matters.  A
@@ -306,25 +372,39 @@ is that of the line \emph{after} the definition or use line.  Both
 [[@nl]] and [[@index nl]] count, because [[nt]] counts both.  Lines
 with several uses arm [[sawuse]] several times but the terminating
 [[@nl]] converts it just once, so such a line gets exactly one
-marker.
+marker.  [[firstdef]] steps through its two states here: the
+definition line's [[@nl]] promotes it from~1 to~2, and the next
+[[@nl]]---the one ending the chunk's first content line---arms
+[[pending]] like the other events do.  The arming branch runs before
+the promotion and clears [[firstdef]], so a first line that also
+contains a use arms exactly one marker.
 
 <<rules: [[@nl]] counts lines and schedules pending markers>>=
 /^(@nl|@index nl)$/ {
-  if (code && pending) marker()
+  if (code && pending && (eager || !contline)) marker()
   print
   lineno++
-  if (code && (afterdefn || sawuse)) { pending = 1; afterdefn = 0; sawuse = 0 }
+  if (code && (afterdefn || sawuse || firstdef == 2)) {
+    pending = 1; afterdefn = 0; sawuse = 0; firstdef = 0
+  }
+  if (code && firstdef == 1) firstdef = 2
+  if (code) { contline = bs; bs = 0 }
   next
 }
 @
 
-Ordinary text discharges a pending marker and passes through.  Text
-in documentation chunks is never preceded by a pending marker because
-[[pending]] is only ever set while [[code]] is~1, but the guard keeps
-the invariant local and obvious.
+Ordinary text discharges a pending marker and passes through, and it
+is where the backslash guard learns what it knows: each [[@text]]
+records whether it ends in a backslash, the last one on a line
+winning, which the [[@nl]] rule then freezes into [[contline]].
+Text in documentation chunks is never preceded by a pending marker
+because [[pending]] is only ever set while [[code]] is~1, but the
+guard keeps the invariant local and obvious.
 
 <<rules: [[@text]] discharges a pending marker>>=
-/^@text /       { if (code && pending) marker(); print; next }
+/^@text /       { if (code && pending && (eager || !contline)) marker()
+                  if (code) bs = ($0 ~ /\\$/)
+                  print; next }
 @
 
 
@@ -787,8 +867,10 @@ is a
 filter that inserts a comment line, by default
 .BR "# %L \(dq%F\(dq" ,
 wherever the tangled output jumps to a different place in the noweb
-source: at the start of every code chunk and after every line that
-uses another chunk.
+source: after the first line of every code chunk (announcing its
+second, so that a chunk spliced into the middle of a line never has
+its first line broken), before continuation definitions of the same
+chunk, and after every line that uses another chunk.
 Tangle
 .I without
 the
@@ -831,6 +913,16 @@ When both options are given,
 .B \-L
 wins.
 .TP
+.B \-e, \-\-eager
+Place every chunk's marker before its first line, as earlier
+versions did, and mark after backslash continuations too.
+A chunk spliced into the middle of a line then carries the marker
+inside the broken line, and a marker after a continuation severs
+it, so this suits only consumers that post-process the tangled text
+and repair both themselves (vim-noweb's shadow buffers do); in
+exchange they get an exact map, with no lines anchored across a
+splice.
+.TP
 .B \-h, \-\-help
 Print a help message and exit.
 .SH EXAMPLE
@@ -839,11 +931,17 @@ notangle -Rfoo.py -filter linemark foo.nw > foo.py
 nolinemap python3 foo.py
 .fi
 .SH BUGS
-A chunk used mid-expression (with non-whitespace to the left of the
-chunk reference on the line) gets the used chunk's first marker glued
-into that output line, corrupting the code.
-Statement-position uses, the only idiomatic kind in Python, are
-unaffected.
+The first line of a chunk is anchored by counting from the marker
+before its use site, so an error on it is reported at the line using
+the chunk rather than at its definition.
+The same counting covers any leading lines of a chunk that end in a
+backslash: a marker there would sever the continuation, so it is
+delayed until a line without one, and messages pointing into the
+delayed run come out shifted by the length of the splice detour.
+A chunk whose first line opens a multi-line string cannot be
+protected the same way; the delayed marker lands inside the string.
+The very first line of the tangled file has no marker before it at
+all; messages pointing there are not translated.
 .SH SEE ALSO
 .IR nolinemap (1),
 .IR notangle (1)
