@@ -66,10 +66,18 @@ def main():
     parser = argparse.ArgumentParser(
         prog="nolinemap",
         description="Translate messages pointing into tangled files "
-                    "so that they point into the .nw sources.")
+                    "so that they point into the .nw sources.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="examples:\n"
+               "  notangle -Rfoo.py -filter linemark foo.nw > foo.py\n"
+               "  nolinemap python3 foo.py     # run mode, keeps exit"
+               " status\n"
+               "  make 2>&1 | nolinemap        # pipe mode\n"
+               "also installed under the alias noerr")
     parser.add_argument("-L", dest="fmt", metavar="fmt", default=None,
                         help="marker format used when tangling "
-                             "(default: %r)" % DEFAULT_FMT)
+                             "(default: %s)"
+                             % DEFAULT_FMT.replace("%", "%%"))
     parser.add_argument("-c", dest="leader", metavar="leader",
                         default=None,
                         help="marker comment leader (default: '#')")
