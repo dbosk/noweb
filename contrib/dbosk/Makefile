@@ -24,6 +24,7 @@ nolinemap.1: nolinemap.nw
 
 install: all
 	cp linemark nolinemap $(LIB)
+	chmod 755 $(LIB)/linemark $(LIB)/nolinemap
 	ln -sf nolinemap $(LIB)/noerr
 	if [ -n "$(MAN)" ]; then \
 	  mkdir -p $(MANDIR); \
