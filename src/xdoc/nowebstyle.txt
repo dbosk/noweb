@@ -22,6 +22,10 @@ DDEESSCCRRIIPPTTIIOONN
        nnoommaarrggiinnttaagg
               Don't use margin tags.
 
+       mmiinntteedd Load the _m_i_n_t_e_d package, so that code highlighted  by  the  _t_o_m_‐
+              _i_n_t_e_d  filter can be typeset.  Usually requested as nnoowweeaavvee --oopp‐‐
+              ttiioonn mmiinntteedd when _n_o_w_e_a_v_e generates the document preamble.
+
        sshhiifftt  Shift text to the left so that long code lines won't extend  off
               the right-hand side of the page.
 

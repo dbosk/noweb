@@ -33,6 +33,18 @@ left margin. (Default)
 .B nomargintag
 Don't use margin tags.
 .TP
+.B minted
+Load the
+.I minted
+package, so that code highlighted by the
+.I tominted
+filter can be typeset.
+Usually requested as
+.B "noweave -option minted"
+when
+.I noweave
+generates the document preamble.
+.TP
 .B shift
 Shift text to the left so that long code lines won't extend
 off the right-hand side of the page.
