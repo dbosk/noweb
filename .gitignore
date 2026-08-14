@@ -40,3 +40,7 @@ __pycache__/
 /examples/*.pdf
 /examples/_minted/
 /examples/fib/
+/contrib/dbosk/example.py
+/contrib/dbosk/example-eager.py
+/contrib/dbosk/test.out
+CLAUDE.md
