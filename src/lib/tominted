@@ -350,6 +350,19 @@ ENV_OPTIONS = "xleftmargin=\\codemargin,vspace=0pt"
 CUSTOM_LEXER = None
 ESCAPE_LEFT = "\ue000"
 ESCAPE_RIGHT = "\ue001"
+# Code that itself generates minted output contains the environment's
+# end marker, which would end our environment early.  Such chunks are
+# typeset in a wrapper environment with another name, defined on first
+# use; \VerbatimEnvironment makes minted scan for the wrapper's end
+# marker instead, exactly as minted's own \newminted does.
+MINTED_END = "\\end{" + "minted}"
+WRAPPER_NAMES = ["nwminted", "nwmintedalt", "nwmintedcode"]
+def wrapper_definition(name):
+    """Return LaTeX defining wrapper environment ``name`` once."""
+    return ("\\ifcsname " + name + "\\endcsname\\else"
+            "\\newenvironment{" + name + "}[2]"
+            "{\\VerbatimEnvironment\\begin{minted}[#1]{#2}}"
+            "{" + MINTED_END + "}\\fi")
 def render_use(name, label):
     """Return totex's LaTeX for a chunk reference inside code."""
     tex = "\\LA{}" + conv_quotes(name)
@@ -384,7 +397,20 @@ def rewrite_chunk(chunk, lang, out, start, plain_uses):
     stream; ``lang`` is the Pygments lexer name; ``plain_uses``
     holds the stream indices of string-embedded uses; the
     rewritten lines are appended to ``out``.
+
+    A chunk containing minted's own end marker is typeset in a wrapper
+    environment instead; see ``wrapper_definition``.  Its definition is
+    emitted before the chunk, since noweb's code mode makes spaces
+    active, which would break the definition.
     """
+    code_text = "".join((parse(l)[1] or "") for l in chunk
+                        if parse(l)[0] == "text")
+    environment = "minted"
+    if MINTED_END in code_text:
+        environment = next((name for name in WRAPPER_NAMES
+                            if "\\end{" + name + "}" not in code_text),
+                           WRAPPER_NAMES[0])
+        out.append("@literal " + wrapper_definition(environment))
     position = 0
     while position < len(chunk):
         line = chunk[position]
@@ -453,8 +479,12 @@ def rewrite_chunk(chunk, lang, out, start, plain_uses):
             options += ",escapeinside={" + delimiter + delimiter + "}"
     else:
         lexer = CUSTOM_LEXER + ":" + lexer_class(lang)
-    out.append("@literal " + CATCODE_RESET + LIST_SPACING_RESET
-               + "\\begin{minted}[" + options + "]{" + lexer + "}")
+    if environment != "minted":
+        begin = ("\\begin{" + environment + "}{" + options + "}{"
+                 + lexer + "}")
+    else:
+        begin = "\\begin{minted}[" + options + "]{" + lexer + "}"
+    out.append("@literal " + CATCODE_RESET + LIST_SPACING_RESET + begin)
     out.append("@nl")
     for line in body:
         parts = []
@@ -469,7 +499,7 @@ def rewrite_chunk(chunk, lang, out, start, plain_uses):
                 parts.append("<<" + part[1] + ">>")
         out.append("@literal " + "".join(parts))
         out.append("@nl")
-    out.append("@literal \\end{minted}")
+    out.append("@literal \\end{" + environment + "}")
     out.append("@nl")
     out.extend(relocated)
     out.extend(trailer)
