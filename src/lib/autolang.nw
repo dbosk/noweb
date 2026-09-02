@@ -64,7 +64,8 @@ and [[inference functions]], apart from the annotation logic of
 Section~\ref{sec:annotate}.  A filter that needs the same language
 map---a highlighter choosing a lexer per chunk, say---can then tangle
 from this file alongside its own source, since [[notangle]] accepts
-several files, instead of duplicating the code.
+several files, instead of duplicating the code.  The [[tominted]]
+filter (\texttt{tominted.nw}) does exactly that.
 
 \subsection{Program layout}
 

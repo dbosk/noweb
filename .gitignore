@@ -37,3 +37,10 @@ src/c/*.o
 /contrib/dbosk/example.py
 /contrib/dbosk/example-eager.py
 /contrib/dbosk/test.out
+__pycache__/
+/examples/*.tex
+/examples/*.log
+/examples/*.pdf
+/examples/_minted/
+/examples/noweb_lexer.py
+/examples/fib/
