@@ -106,8 +106,7 @@ noweave -delay -autolang \
     -langrule 'test \[\[.*\.py\]\]=python' \
     -langrule 'check \[\[.*\.py\]\]=bash' \
     -autodefs python3 -autodefs sh -index \
-    -filter 'tominted -lexer noweb_lexer.py' \
-    labeled.nw > labeled.tex
+    -filter tominted labeled.nw > labeled.tex
 pdflatex -shell-escape labeled.tex
 \end{verbatim}
 The highlighted build needs the one-time [[latexminted]] setup

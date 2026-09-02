@@ -41,6 +41,10 @@ pdflatex -shell-escape fib.tex
 pdflatex -shell-escape fib.tex
 ```
 
+Compiling this weave needs the one-time whitelist setup of the next
+section, because tominted uses the bundled custom lexer by default;
+weave with `-filter 'tominted -nolexer'` to skip it.
+
 Classic noweb rendering, with identifier *uses* hyperlinked inside
 code (minted owns the code body in the highlighted version, so use
 links inside code exist only in this mode):
@@ -53,18 +57,15 @@ pdflatex -shell-escape fib-xref.tex
 
 The examples' Makefile wires both: `make fib.tex fib-xref.tex`.
 
-## Linked references inside docstrings (optional)
+## Linked references inside docstrings
 
-In the plain highlighted PDF, a chunk reference *inside* a Python
-string (like the docstring chunk in fib.nw) is shown as literal
-`<<...>>` text: Pygments' escape mechanism refuses to work inside
-string tokens. The bundled custom lexer lifts that limitation, so
-even the docstring reference is typeset as a linked chunk
-reference:
-
-```bash
-make fib-linked.pdf
-```
+In the highlighted PDF, chunk references stay hyperlinked even
+*inside* a Python string (like the docstring chunk in fib.nw).
+Pygments' escape mechanism refuses to work inside string tokens,
+so tominted renders references through a bundled custom lexer by
+default: it locates the installed noweb_lexer.py next to its own
+script and writes that absolute path into the woven document, so
+no copy of the lexer file is needed next to the LaTeX sources.
 
 This needs one-time setup, because minted treats loading custom
 lexer files as arbitrary code execution. Whitelist the lexer by
@@ -74,14 +75,15 @@ hash in `~/.config/latexminted/.latexminted_config` (or
 ```bash
 mkdir -p ~/.config/latexminted
 printf '{"custom_lexers": {"noweb_lexer.py": "%s"}}\n' \
-    "$(sha256sum noweb_lexer.py | cut -d' ' -f1)" \
+    "$(sha256sum ../src/lib/noweb_lexer.py | cut -d' ' -f1)" \
     > ~/.config/latexminted/.latexminted_config
 ```
 
-The hash must be updated whenever noweb_lexer.py changes. The
-lexer file itself (tangled from src/lib/tominted.nw and installed
-with noweb) must be readable from the directory where pdflatex
-runs; the Makefile copies it here.
+The key is the file's name and hash, not its path, so one entry
+covers the file wherever noweb is installed; the hash must be
+updated whenever noweb_lexer.py changes. To skip the setup
+entirely, weave with `-filter 'tominted -nolexer'`: references
+inside strings are then shown as literal `<<...>>` text.
 
 ## Tangling
 
