@@ -231,32 +231,13 @@ keyword (see
 .B autolang
 above) uses the annotated language instead, and the annotation is
 removed from the stream.
-Chunk references inside highlighted code remain hyperlinked,
-except inside Python string literals, where a reference is shown
-as plain noweb syntax and the referenced chunk is typeset as
-plain text rather than code (suiting docstring chunks).
-It should be given as the last filter, after
-.BR \-index ;
-identifier definitions stay in the index, but identifier uses inside
-highlighted chunks are no longer hyperlinked.
-The optional
-.I mappings
-arguments extend the language tables and add rules exactly as for
-.BR autolang .
-With
-.B \-lexer
-.I path
-references are rendered through the bundled custom Pygments lexer
-(the tangled
+Chunk references inside highlighted code remain hyperlinked, even
+inside Python string literals: they are rendered through the
+bundled custom Pygments lexer (the tangled
 .BR noweb_lexer.py ,
-installed in the noweb library directory), which keeps them
-hyperlinked even inside Python strings.
-.I path
-is copied into the woven document verbatim, so it must name the
-lexer file as LaTeX will see it: an absolute path, or one relative
-to the directory where
-.I pdflatex
-runs.
+installed next to the filter in the noweb library directory),
+which the filter locates itself and names by absolute path in the
+woven document.
 Loading a custom lexer is a one-time setup, because
 .B minted
 treats it as running arbitrary code:
@@ -275,7 +256,6 @@ mkdir -p ~/.config/latexminted
 printf '{"custom_lexers": {"noweb_lexer.py": "%s"}}\en' \e
     "$(sha256sum LIB/noweb_lexer.py | cut -d' ' -f1)" \e
     > ~/.config/latexminted/.latexminted_config
-noweave -index -filter 'tominted -lexer LIB/noweb_lexer.py' foo.nw
 .fi
 .RE
 .IP
@@ -285,6 +265,34 @@ serves wherever noweb is installed; it must be updated whenever
 changes (see the
 .B minted
 documentation).
+It should be given as the last filter, after
+.BR \-index ;
+identifier definitions stay in the index, but identifier uses inside
+highlighted chunks are no longer hyperlinked.
+The optional
+.I mappings
+arguments extend the language tables and add rules exactly as for
+.BR autolang .
+With
+.B \-lexer
+.I path
+another lexer file is substituted;
+.I path
+is copied into the document verbatim, so a relative path names the
+file as LaTeX will see it.
+That helps where absolute paths fail: an
+.B openin_any=p
+setting forbids reading outside the working directory, and a
+library path containing characters special to LaTeX would break
+the
+.B minted
+argument.
+With
+.B \-nolexer
+the custom lexer is disabled and no whitelist setup is needed;
+references inside Python string literals are then shown as plain
+noweb syntax and the referenced chunk is typeset as plain text
+rather than code (suiting docstring chunks).
 The woven document must load the
 .B minted
 package and be compiled with
