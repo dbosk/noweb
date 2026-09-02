@@ -230,10 +230,23 @@ keyword (see
 .B autolang
 above) uses the annotated language instead, and the annotation is
 removed from the stream.
-Chunk references inside highlighted code remain hyperlinked,
-except inside Python string literals, where a reference is shown
-as plain noweb syntax and the referenced chunk is typeset as
-plain text rather than code (suiting docstring chunks).
+Chunk references inside highlighted code remain hyperlinked, even
+inside Python string literals: they are rendered through the
+bundled custom Pygments lexer (the tangled
+.BR noweb_lexer.py ,
+installed next to the filter in the noweb library directory),
+which the filter locates itself and names by absolute path in the
+woven document.
+Loading a custom lexer is a one-time setup:
+.B latexminted
+requires the file to be whitelisted by SHA-256 hash under
+.B custom_lexers
+in a
+.B .latexminted_config
+file in the user's home directory (the key is the file's name and
+hash, not its path); see the
+.B minted
+documentation.
 It should be given as the last filter, after
 .BR \-index ;
 identifier definitions stay in the index, but identifier uses inside
@@ -245,20 +258,23 @@ arguments extend the language tables and add rules exactly as for
 With
 .B \-lexer
 .I path
-references are rendered through the bundled custom Pygments lexer
-(the tangled
-.BR noweb_lexer.py ,
-installed in the noweb library directory), which keeps them
-hyperlinked even inside Python strings.
+another lexer file is substituted;
 .I path
-names the lexer file relative to the directory where LaTeX runs,
-and the file must be whitelisted by SHA-256 hash under
-.B custom_lexers
-in a
-.B .latexminted_config
-file in the user's home directory; see the
+is copied into the document verbatim, so a relative path names the
+file as LaTeX will see it.
+That helps where absolute paths fail: an
+.B openin_any=p
+setting forbids reading outside the working directory, and a
+library path containing characters special to LaTeX would break
+the
 .B minted
-documentation.
+argument.
+With
+.B \-nolexer
+the custom lexer is disabled and no whitelist setup is needed;
+references inside Python string literals are then shown as plain
+noweb syntax and the referenced chunk is typeset as plain text
+rather than code (suiting docstring chunks).
 The woven document must load the
 .B minted
 package and be compiled with
