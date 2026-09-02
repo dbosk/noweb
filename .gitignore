@@ -42,5 +42,4 @@ __pycache__/
 /examples/*.log
 /examples/*.pdf
 /examples/_minted/
-/examples/noweb_lexer.py
 /examples/fib/

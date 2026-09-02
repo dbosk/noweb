@@ -115,28 +115,37 @@ FFIILLTTEERRSS
               highlight  is  recognized.  A chunk annotated with the @@llaanngguuaaggee
               keyword (see aauuttoollaanngg above) uses  the  annotated  language  in‐
               stead,  and  the  annotation  is removed from the stream.  Chunk
-              references inside highlighted code  remain  hyperlinked,  except
-              inside  Python  string  literals,  where a reference is shown as
-              plain noweb syntax and the referenced chunk is typeset as  plain
-              text  rather than code (suiting docstring chunks).  It should be
-              given as the last filter, after --iinnddeexx;  identifier  definitions
-              stay in the index, but identifier uses inside highlighted chunks
-              are  no longer hyperlinked.  The optional _m_a_p_p_i_n_g_s arguments ex‐
-              tend the language tables and add rules exactly as for  aauuttoollaanngg.
-              With  --lleexxeerr  _p_a_t_h  references  are rendered through the bundled
-              custom Pygments lexer (the tangled nnoowweebb__lleexxeerr..ppyy, installed  in
-              the  noweb library directory), which keeps them hyperlinked even
-              inside Python strings.  _p_a_t_h names the lexer  file  relative  to
-              the directory where LaTeX runs, and the file must be whitelisted
-              by  SHA-256  hash  under  ccuussttoomm__lleexxeerrss in a ..llaatteexxmmiinntteedd__ccoonnffiigg
-              file in the user's home directory; see the mmiinntteedd documentation.
-              The woven document must load the mmiinntteedd package and be  compiled
-              with  ppddffllaatteexx --sshheellll--eessccaappee.  The nnoowweebb package can load mmiinntteedd
-              for you: write \\uusseeppaacckkaaggee[[mmiinntteedd]]{{nnoowweebb}} when you  supply  your
-              own preamble, or pass nnoowweeaavvee --ooppttiioonn mmiinntteedd when _n_o_w_e_a_v_e gener‐
-              ates the preamble.  LaTeX only; do not combine with --hhttmmll.  (Re‐
-              quires  Python  3  where  _n_o_w_e_a_v_e  runs; Pygments is needed only
-              where the document is compiled, by mmiinntteedd.)
+              references inside highlighted code remain hyperlinked, even  in‐
+              side  Python string literals: they are rendered through the bun‐
+              dled custom Pygments  lexer  (the  tangled  nnoowweebb__lleexxeerr..ppyy,  in‐
+              stalled  next  to  the  filter  in the noweb library directory),
+              which the filter locates itself and names by  absolute  path  in
+              the woven document.  Loading a custom lexer is a one-time setup:
+              llaatteexxmmiinntteedd  requires the file to be whitelisted by SHA-256 hash
+              under ccuussttoomm__lleexxeerrss in a ..llaatteexxmmiinntteedd__ccoonnffiigg file in the  user's
+              home  directory  (the  key  is the file's name and hash, not its
+              path); see the mmiinntteedd documentation.  It should be given as  the
+              last  filter,  after  --iinnddeexx; identifier definitions stay in the
+              index, but identifier uses  inside  highlighted  chunks  are  no
+              longer  hyperlinked.  The optional _m_a_p_p_i_n_g_s arguments extend the
+              language tables and add rules exactly  as  for  aauuttoollaanngg.   With
+              --lleexxeerr  _p_a_t_h  another  lexer file is substituted; _p_a_t_h is copied
+              into the document verbatim, so a relative path names the file as
+              LaTeX will see it.  That helps where  absolute  paths  fail:  an
+              ooppeenniinn__aannyy==pp  setting forbids reading outside the working direc‐
+              tory, and a library path containing characters special to  LaTeX
+              would break the mmiinntteedd argument.  With --nnoolleexxeerr the custom lexer
+              is  disabled and no whitelist setup is needed; references inside
+              Python string literals are then shown as plain noweb syntax  and
+              the  referenced  chunk is typeset as plain text rather than code
+              (suiting docstring chunks).  The woven document  must  load  the
+              mmiinntteedd package and be compiled with ppddffllaatteexx --sshheellll--eessccaappee.  The
+              nnoowweebb   package   can  load  mmiinntteedd  for  you:  write  \\uusseeppaacckk‐‐
+              aaggee[[mmiinntteedd]]{{nnoowweebb}} when you supply your own  preamble,  or  pass
+              nnoowweeaavvee --ooppttiioonn mmiinntteedd when _n_o_w_e_a_v_e generates the preamble.  La‐
+              TeX  only;  do not combine with --hhttmmll.  (Requires Python 3 where
+              _n_o_w_e_a_v_e runs; Pygments is needed only where the document is com‐
+              piled, by mmiinntteedd.)
 
        xxcchhuunnkkss _f_i_l_e_s
               The xxcchhuunnkkss filter pulls in code chunks from an external source.
