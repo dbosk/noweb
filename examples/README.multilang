@@ -23,8 +23,8 @@ actually contains, and stacks the matching scanner for each---so one
 command indexes all six languages and names none of them:
 
 ```bash
-noweave -delay -autolang -index \
-    -filter 'tominted -lexer noweb_lexer.py' multilang.nw > multilang.tex
+noweave -delay -autolang -index -filter tominted \
+    multilang.nw > multilang.tex
 ```
 
 This once required two builds.  Six scanners plus the index filters
@@ -55,8 +55,8 @@ One highlighted weave indexes all six languages; `-autolang` supplies
 the scanners, so no `-autodefs` appears:
 
 ```bash
-noweave -delay -autolang -index \
-    -filter 'tominted -lexer noweb_lexer.py' multilang.nw > multilang.tex
+noweave -delay -autolang -index -filter tominted \
+    multilang.nw > multilang.tex
 pdflatex -shell-escape multilang.tex
 pdflatex -shell-escape multilang.tex
 ```

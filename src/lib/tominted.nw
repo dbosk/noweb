@@ -17,6 +17,12 @@ be compiled with shell escape enabled, e.g.\
 Pygments at compile time.  This filter targets the LaTeX backend only;
 do not combine it with [[-html]].
 
+By default the woven document names a bundled custom lexer, so chunk
+references stay hyperlinked even inside strings and comments; loading
+it requires a one-time [[latexminted]] whitelist entry
+(Section~\ref{sec:lexer}).  Pass [[-nolexer]] to trade those links
+for a setup-free weave.
+
 \subsection{Overview}
 
 The filter is a Python~3 program that copies the noweb markup stream
@@ -79,6 +85,7 @@ replacing the body of every code chunk of known language with a
 ``noweave``, after ``-index``.  See nowebfilters(7).
 """
 
+import os
 import sys
 
 <<inference constants>>
@@ -571,21 +578,74 @@ for _, _aliases, _, _ in get_all_lexers():
                                     {"base_lexer": _alias})
 @
 
-On the filter side, the custom lexer is enabled with
-[[-lexer path]], where the path points at the tangled
-[[noweb_lexer.py]] as the LaTeX compilation will see it (it is
-written into the document, so it is relative to the directory where
-[[pdflatex]] runs).  When enabled, \emph{every} chunk reference,
-string-embedded or not, is emitted between the private-use
-delimiters, the [[escapeinside]] option and the per-chunk delimiter
-search are skipped, and the environments name the custom lexer
-classes instead of the stock lexers.
+On the filter side, the custom lexer is active by default.  The
+lexer file is tangled from this very document and installed next to
+the filter itself (the Makefile copies both into the same library
+directory), so the filter locates it relative to its own file at run
+time.  Runtime resolution beats build-time path substitution here:
+the Makefile installs the filter verbatim, without the [[|LIBDIR|]]
+[[sed]] step some of its siblings get, and the same lookup works
+when the filter runs uninstalled from the source tree, where
+[[noweb_lexer.py]] tangles into the same directory.
+
+The resolved path is written into the woven document as an
+\emph{absolute} path.  It is consumed by [[latexminted]] when
+[[pdflatex]] runs---a different process, in a different directory,
+usually much later---so a relative path could only be relative to
+the LaTeX working directory, which is why the lexer file previously
+had to be copied next to the document.  An absolute path is safe on
+two grounds: TeX Live's default [[openin_any=a]] permits reading
+files anywhere, and the [[latexminted]] whitelist (below) is keyed
+by file name and hash, not by path.  When the custom lexer is
+active, \emph{every} chunk reference, string-embedded or not, is
+emitted between the private-use delimiters, the [[escapeinside]]
+option and the per-chunk delimiter search are skipped, and the
+environments name the custom lexer classes instead of the stock
+lexers.
+
+[[-lexer path]] overrides the default; the path is written into the
+document verbatim, so a relative path names the lexer file as the
+LaTeX compilation will see it.  That is the escape hatch where
+absolute paths fail: a paranoid [[openin_any=p]] forbids reading
+outside the working directory, and a library path containing
+LaTeX-special characters (spaces, [[%]], [[#]]) would break the
+minted argument.  [[-nolexer]] disables the custom lexer entirely,
+restoring the [[escapeinside]] mechanism and the plain-text
+rendering of string-embedded references
+(Section~\ref{sec:strings})---and with them, freedom from the
+whitelist setup below.
 
 <<constants>>=
 CUSTOM_LEXER = None
 ESCAPE_LEFT = "\ue000"
 ESCAPE_RIGHT = "\ue001"
 @
+
+The default is resolved in [[main]] (Section~\ref{sec:main}), after
+argument parsing, so an explicit [[-lexer]] or [[-nolexer]] never
+probes the file system.  [[realpath]] does double duty: it
+absolutizes the path when the filter is invoked by a relative name
+from the source tree, and it resolves a symlinked installation to
+the directory holding the real files, where [[noweb_lexer.py]]
+actually sits.  A missing lexer file degrades to the
+[[escapeinside]] mechanism with a warning rather than failing the
+weave---the woven document is still correct, it merely loses the
+links inside strings (Section~\ref{sec:strings}).
+
+<<functions>>=
+def default_lexer():
+    """Return the absolute path of the bundled noweb_lexer.py.
+
+    The lexer file is installed next to this filter.  Returns
+    None, with a warning on stderr, when it is missing.
+    """
+    lexer = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                         "noweb_lexer.py")
+    if os.path.exists(lexer):
+        return lexer
+    print("tominted: warning: noweb_lexer.py not found next to the",
+          "filter; falling back to escapeinside", file=sys.stderr)
+    return None
 
 <<functions>>=
 def lexer_class(lang):
@@ -606,7 +666,10 @@ the file name and its SHA-256 hash are whitelisted in a
 \begin{verbatim}
 {"custom_lexers": {"noweb_lexer.py": "<sha256 of the file>"}}
 \end{verbatim}
-The hash must be updated whenever [[noweb_lexer.py]] changes.
+The hash must be updated whenever [[noweb_lexer.py]] changes.  The
+key is the file's base name, not its path, so the absolute path the
+filter embeds needs no entry of its own: one whitelist entry covers
+the installed file wherever it lives.
 
 \subsection{Driving the rewrite}
 
@@ -656,10 +719,18 @@ the parsing, [[add_mapping]], belongs to the shared inference
 filters read the same forms, e.g.\ [[-filter 'tominted .rs=rust']].
 The only option of tominted's own is [[-lexer]] (Section~\ref{sec:lexer}).
 
+The custom lexer of Section~\ref{sec:lexer} is on by default;
+[[-lexer path]] substitutes another lexer file and [[-nolexer]]
+turns the mechanism off.  Tracking whether either flag appeared,
+rather than probing eagerly and letting flags overwrite the result,
+keeps the file-system probe out of every weave that has already
+made its choice.
+
 <<functions>>=
 def main():
     """Filter a noweb markup stream from stdin to stdout."""
     global CUSTOM_LEXER
+    lexer_chosen = False
     arguments = sys.argv[1:]
     while arguments:
         argument = arguments.pop(0)
@@ -669,11 +740,18 @@ def main():
                       file=sys.stderr)
                 sys.exit(1)
             CUSTOM_LEXER = arguments.pop(0)
+            lexer_chosen = True
+            continue
+        if argument == "-nolexer":
+            CUSTOM_LEXER = None
+            lexer_chosen = True
             continue
         if not add_mapping(argument):
             print("tominted: unknown argument:", argument,
                   file=sys.stderr)
             sys.exit(1)
+    if not lexer_chosen:
+        CUSTOM_LEXER = default_lexer()
     lines = sys.stdin.read().split("\n")
     if lines and lines[-1] == "":
         lines.pop()
