@@ -72,7 +72,15 @@ The optional
 arguments extend the built-in language tables, each of the form
 .I .ext=lexer
 or
-.IR name=lexer ;
+.IR name=lexer ,
+or add a rule of the form
+.IR re:regex=lexer ,
+which labels every chunk whose name matches
+.I regex
+and so classifies chunks whose names are not filenames
+.RI ( noweave 's
+.B \-langrule
+option supplies one);
 languages are named by their Pygments lexer aliases.
 Running it twice is harmless: already-annotated chunks are left
 alone.

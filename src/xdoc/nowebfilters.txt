@@ -39,7 +39,10 @@ FFIILLTTEERRSS
               _n_o_w_e_a_v_e's --aauuttoollaanngg option places it first in  the  pipeline  (a
               plain  --ffiilltteerr always runs after the autodefs filters).  The op‐
               tional _m_a_p_p_i_n_g_s arguments extend the built-in  language  tables,
-              each  of  the form _._e_x_t_=_l_e_x_e_r or _n_a_m_e_=_l_e_x_e_r; languages are named
+              each  of the form _._e_x_t_=_l_e_x_e_r or _n_a_m_e_=_l_e_x_e_r, or add a rule of the
+              form _r_e_:_r_e_g_e_x_=_l_e_x_e_r, which labels every chunk whose name matches
+              _r_e_g_e_x and so classifies chunks whose  names  are  not  filenames
+              (_n_o_w_e_a_v_e's  --llaannggrruullee  option supplies one); languages are named
               by their Pygments lexer aliases.  Running it twice is  harmless:
               already-annotated  chunks  are  left alone.  (Requires Python 3.
               Pygments, when importable, extends the built-in filename  tables
