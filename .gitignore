@@ -43,3 +43,4 @@ __pycache__/
 /examples/*.pdf
 /examples/_minted/
 /examples/fib/
+CLAUDE.md
