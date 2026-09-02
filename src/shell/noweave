@@ -66,6 +66,9 @@ while [ $# -gt 0 ]; do
              if [ -z "$noweboptions" ] ; then noweboptions="$newopt"
              else noweboptions="$noweboptions,$newopt"
              fi ;;
+    -minted)  newopt="minted"; if [ -z "$noweboptions" ] ; then noweboptions="$newopt"
+                               else noweboptions="$noweboptions,$newopt"
+                               fi ;;
     # -nodelay) delay= ;;
     -delay)   delay="-delay" ; wrapper=none ;;
     -t*) markopts="$markopts $1" ;;
@@ -93,6 +96,7 @@ while [ $# -gt 0 ]; do
                                                    echo "-autolang Annotate chunks with their language; with -index, add autodefs for each language found." 1>&2
                                                    echo "-langrule re=lang Label chunks whose name matches regex 're' as language 'lang' (implies -autolang)." 1>&2
                                                    echo '-option opt       Add \noweboptions{opt} to header (latex only)' 1>&2
+                                                   echo '-minted           Shorthand for -filter tominted -option minted' 1>&2
                                                    echo "-delay            Delay markup until after first documentation chunk." 1>&2
                                                    echo "-tk               Expand tab stops every k columns" 1>&2
                                                    echo "-t                Copy tabs to the output" 1>&2
@@ -144,6 +148,7 @@ while [ $# -gt 0 ]; do
         newfilter="$LIB/finduses $noquote $2";    filters="$filters$newfilter$nl"
         newfilter="$LIB/noidx $docanchor $delay"; filters="$filters$newfilter$nl"
         shift ;;
+    -minted)  newfilter="tominted"; filters="$filters$newfilter$nl" ;;
   esac
   shift
 done
