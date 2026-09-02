@@ -116,6 +116,8 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+statusfile=$($LIB/nwmktemp) || { echo "$0: Cannot create temporary file" 1>&2; exit 1; }
+trap 'rm -f "$statusfile"' 0 1 2 15
 (
 header=
 case $wrapper in
@@ -145,22 +147,51 @@ if [ -n "$verbose" ]; then
 fi
 if [ -n "$verbose" ]; then echo $backend $noindex $delay $shortxref 1>&2; fi
 pipeline=
+stage=0
 oldIFS=$IFS
 IFS=$nl
 for f in $filters; do
+  stage=`expr $stage + 1`
+  wrapped="{ $f || echo \"$stage \$?\" >>\"\$statusfile\"; }"
   if [ -z "$pipeline" ]; then
-    pipeline="$f"
+    pipeline="$wrapped"
   else
-    pipeline="$pipeline | $f"
+    pipeline="$pipeline | $wrapped"
   fi
 done
 IFS=$oldIFS
 if [ -z "$pipeline" ]; then
-  $markup $markopts $arg
+  { $markup $markopts $arg || echo "0 $?" >>"$statusfile"; }
 else
-  $markup $markopts $arg | eval "$pipeline"
+  { $markup $markopts $arg || echo "0 $?" >>"$statusfile"; } | eval "$pipeline"
 fi
 if [ -n "$trailer" ]; then echo $trailer; fi
 ) |
                                 $backend $noindex $delay $shortxref
-exit $?
+backendstatus=$?
+failedstatus=
+if [ -s "$statusfile" ]; then
+  oldIFS=$IFS
+  IFS=$nl
+  for line in `sort -n "$statusfile"`; do
+    IFS=$oldIFS
+    set -- $line
+    stage=$1 status=$2
+    if [ "$status" -ne 141 ]; then
+      if [ "$stage" -eq 0 ]; then
+        cmd="$markup $markopts $arg"
+      else
+        cmd=`printf '%s\n' "$filters" | sed -n "${stage}p"`
+      fi
+      echo "$0: pipeline stage $stage ($cmd) failed with status $status" 1>&2
+      if [ -z "$failedstatus" ]; then failedstatus=$status; fi
+    fi
+    IFS=$nl
+  done
+  IFS=$oldIFS
+fi
+if [ -n "$failedstatus" ]; then exit $failedstatus; fi
+if [ $backendstatus -ne 0 ]; then
+  echo "$0: back end ($backend $noindex $delay $shortxref) failed with status $backendstatus" 1>&2
+fi
+exit $backendstatus
