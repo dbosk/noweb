@@ -238,16 +238,33 @@ bundled custom Pygments lexer (the tangled
 installed next to the filter in the noweb library directory),
 which the filter locates itself and names by absolute path in the
 woven document.
-Loading a custom lexer is a one-time setup:
-.B latexminted
-requires the file to be whitelisted by SHA-256 hash under
-.B custom_lexers
-in a
-.B .latexminted_config
-file in the user's home directory (the key is the file's name and
-hash, not its path); see the
+Loading a custom lexer is a one-time setup, because
 .B minted
-documentation.
+treats it as running arbitrary code:
+.B latexminted
+loads only files whitelisted by SHA-256 hash under
+.B custom_lexers
+in
+.B ~/.config/latexminted/.latexminted_config
+(or
+.BR ~/.latexminted_config ).
+With the noweb library directory in
+.IR LIB :
+.RS
+.nf
+mkdir -p ~/.config/latexminted
+printf '{"custom_lexers": {"noweb_lexer.py": "%s"}}\en' \e
+    "$(sha256sum LIB/noweb_lexer.py | cut -d' ' -f1)" \e
+    > ~/.config/latexminted/.latexminted_config
+.fi
+.RE
+.IP
+The key is the file's name and hash, not its path, so one entry
+serves wherever noweb is installed; it must be updated whenever
+.B noweb_lexer.py
+changes (see the
+.B minted
+documentation).
 It should be given as the last filter, after
 .BR \-index ;
 identifier definitions stay in the index, but identifier uses inside
