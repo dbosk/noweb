@@ -30,6 +30,39 @@ The
 stands for the name of a programming language.
 (Icon installation only.)
 .TP
+.BI autolang " mappings"
+The
+.B autolang
+filter annotates every code chunk with the
+.B @language
+pipeline keyword.
+The language of a chunk is inferred from its name when the name looks
+like a filename (e.g.\&
+.B fib.py
+or
+.BR Makefile )
+and is inherited through chunk uses otherwise; chunks whose language
+remains unknown are left unannotated.
+It must run before any filter that consumes the annotations, such
+as the autodefs filters;
+.IR noweave 's
+.B \-autolang
+option places it first in the pipeline (a plain
+.B \-filter
+always runs after the autodefs filters).
+The optional
+.I mappings
+arguments extend the built-in language tables, each of the form
+.I .ext=lexer
+or
+.IR name=lexer ;
+languages are named by their Pygments lexer aliases.
+Running it twice is harmless: already-annotated chunks are left
+alone.
+(Requires Python 3.
+Pygments, when importable, extends the built-in filename tables but is
+not needed.)
+.TP
 .B btdefn
 The
 .B btdefn
