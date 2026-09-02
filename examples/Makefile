@@ -76,10 +76,12 @@ fib-run: fib/fib.py fib/Makefile
 	$(MAKE) -C fib test
 	$(MAKE) -C fib run
 # multilang.nw exercises all six new -autodefs filters (cpp, rust,
-# haskell, java, sh, make) in one highlighted, indexed weave; noweave
-# stacks any number of filters.  See multilang.nw's introduction.
+# haskell, java, sh, make).  -autolang discovers the languages and
+# stacks the matching scanners itself, so one weave indexes all six
+# with no -autodefs listed; the pipeline has no fixed slot ceiling.
+# See multilang.nw's introduction.
 multilang.tex: multilang.nw
-	$(NOWEAVE) -delay -autolang -autodefs cpp -autodefs rust -autodefs haskell -autodefs java -autodefs sh -autodefs make -index -filter 'tominted -lexer noweb_lexer.py' multilang.nw > $@
+	$(NOWEAVE) -delay -autolang -index -filter 'tominted -lexer noweb_lexer.py' multilang.nw > $@
 multilang.pdf: multilang.tex noweb_lexer.py
 	mkdir -p _minted
 	pdflatex -shell-escape multilang.tex
