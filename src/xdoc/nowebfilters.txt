@@ -131,44 +131,47 @@ FFIILLTTEERRSS
               by  SHA-256  hash  under  ccuussttoomm__lleexxeerrss in a ..llaatteexxmmiinntteedd__ccoonnffiigg
               file in the user's home directory; see the mmiinntteedd documentation.
               The woven document must load the mmiinntteedd package and be  compiled
-              with  ppddffllaatteexx  --sshheellll--eessccaappee.   LaTeX only; do not combine with
-              --hhttmmll.  (Requires Python  3  where  _n_o_w_e_a_v_e  runs;  Pygments  is
-              needed only where the document is compiled, by mmiinntteedd.)
+              with  ppddffllaatteexx --sshheellll--eessccaappee.  The nnoowweebb package can load mmiinntteedd
+              for you: write \\uusseeppaacckkaaggee[[mmiinntteedd]]{{nnoowweebb}} when you  supply  your
+              own preamble, or pass nnoowweeaavvee --ooppttiioonn mmiinntteedd when _n_o_w_e_a_v_e gener‐
+              ates the preamble.  LaTeX only; do not combine with --hhttmmll.  (Re‐
+              quires  Python  3  where  _n_o_w_e_a_v_e  runs; Pygments is needed only
+              where the document is compiled, by mmiinntteedd.)
 
        xxcchhuunnkkss _f_i_l_e_s
               The xxcchhuunnkkss filter pulls in code chunks from an external source.
               The _f_i_l_e_s argument lists one or more noweb files, which are used
-              only  for their definitions of code chunks.  Empty chunk defini‐
+              only for their definitions of code chunks.  Empty chunk  defini‐
               tions in the main document are replaced with the external defin‐
-              itions of the same name.  This filter makes it possible  to  in‐
-              clude  the  same  code chunks in multiple documents, or even the
+              itions  of  the same name.  This filter makes it possible to in‐
+              clude the same code chunks in multiple documents,  or  even  the
               same code chunks multiple times in the same document.  (Icon in‐
               stallation only.)
 
 PPAARRSSEERRSS
-       A parser converts a source file to the noweb  pipeline  format,  inter‐
-       preting  the  ``markup''  in  that file.  By default, the tools use the
-       standard noweb markup, but some installations may support nuweb  markup
+       A  parser  converts  a source file to the noweb pipeline format, inter‐
+       preting the ``markup'' in that file.  By default,  the  tools  use  the
+       standard  noweb markup, but some installations may support nuweb markup
        as well.  Parsers include
 
        mmaarrkkuupp Converts standard _n_o_w_e_b(1) markup to pipeline format.
 
        nnuummaarrkkuupp
-              Converts  _n_u_w_e_b(1)  markup  to noweb pipeline format.  It is not
-              part of the standard  installation,  but  it  can  be  found  in
+              Converts _n_u_w_e_b(1) markup to noweb pipeline format.   It  is  not
+              part  of  the  standard  installation,  but  it  can be found in
               _n_o_w_e_b's ccoonnttrriibb//nnoorrmmaann directory.
 
 FFIILLEESS
        All filters and parsers are stored in ||LLIIBBDDIIRR||
 
 BBUUGGSS
-       It  is possible to tell ll22hh about new control sequences by putting spe‐
-       cial TeX comments in one's documentation chunks, but there's  no  docu‐
+       It is possible to tell ll22hh about new control sequences by putting  spe‐
+       cial  TeX  comments in one's documentation chunks, but there's no docu‐
        mentation.  Use the source, Luke.
 
-       nnuummaarrkkuupp  loses  information, e.g., about the proper treatment of tabs.
-       It also doesn't compensate for  _n_o_t_a_n_g_l_e's  newline-removal  heuristic,
-       which  means  results  on _n_u_w_e_b files may differ subtly from those pro‐
+       nnuummaarrkkuupp loses information, e.g., about the proper treatment  of  tabs.
+       It  also  doesn't  compensate for _n_o_t_a_n_g_l_e's newline-removal heuristic,
+       which means results on _n_u_w_e_b files may differ subtly  from  those  pro‐
        duced by _n_u_w_e_b_.
 
        Many filters are not available in installations that use Awk instead of
@@ -182,7 +185,7 @@ VVEERRSSIIOONN
        This man page is from _n_o_w_e_b version 2.12.
 
 AAUUTTHHOORR
-       Norman  Ramsey,  Tufts  University.    Internet   address   NNoorrmmaann..RRaamm‐‐
+       Norman   Ramsey,   Tufts   University.   Internet  address  NNoorrmmaann..RRaamm‐‐
        sseeyy@@ttuuffttss..eedduu.
        Noweb home page at hhttttpp::////wwwwww..ccss..ttuuffttss..eedduu//~~nnrr//nnoowweebb.
 
