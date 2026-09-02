@@ -252,14 +252,39 @@ references are rendered through the bundled custom Pygments lexer
 installed in the noweb library directory), which keeps them
 hyperlinked even inside Python strings.
 .I path
-names the lexer file relative to the directory where LaTeX runs,
-and the file must be whitelisted by SHA-256 hash under
-.B custom_lexers
-in a
-.B .latexminted_config
-file in the user's home directory; see the
+is copied into the woven document verbatim, so it must name the
+lexer file as LaTeX will see it: an absolute path, or one relative
+to the directory where
+.I pdflatex
+runs.
+Loading a custom lexer is a one-time setup, because
 .B minted
-documentation.
+treats it as running arbitrary code:
+.B latexminted
+loads only files whitelisted by SHA-256 hash under
+.B custom_lexers
+in
+.B ~/.config/latexminted/.latexminted_config
+(or
+.BR ~/.latexminted_config ).
+With the noweb library directory in
+.IR LIB :
+.RS
+.nf
+mkdir -p ~/.config/latexminted
+printf '{"custom_lexers": {"noweb_lexer.py": "%s"}}\en' \e
+    "$(sha256sum LIB/noweb_lexer.py | cut -d' ' -f1)" \e
+    > ~/.config/latexminted/.latexminted_config
+noweave -index -filter 'tominted -lexer LIB/noweb_lexer.py' foo.nw
+.fi
+.RE
+.IP
+The key is the file's name and hash, not its path, so one entry
+serves wherever noweb is installed; it must be updated whenever
+.B noweb_lexer.py
+changes (see the
+.B minted
+documentation).
 The woven document must load the
 .B minted
 package and be compiled with
