@@ -261,7 +261,13 @@ IINNDDEEXXIINNGG AANNDD CCRROOSSSS--RREEFFEERREENNCCEE
               todefs filters then skip chunks written in languages they do not
               understand, keeping foreign identifiers  out  of  the  index  in
               mixed-language  documents.   The  annotator  runs  first  in the
-              pipeline no matter where the option is given.
+              pipeline no matter where the option  is  given.   When  combined
+              with  --iinnddeexx,  --aauuttoollaanngg also supplies the --aauuttooddeeffss filters it‐
+              self: it adds the autodefs filter for each language  it  discov‐
+              ers,  so a mixed-language document can be indexed without naming
+              any language on the command line.  A language for which  no  au‐
+              todefs  filter is installed is simply left unindexed, and an ex‐
+              plicit --aauuttooddeeffss is honored and never duplicated.
 
        --llaannggrruullee _r_e_g_e_x==_l_a_n_g
               Label every code chunk whose  name  matches  _r_e_g_e_x  as  language
