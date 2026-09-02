@@ -176,7 +176,13 @@ def rewrite_chunk(chunk, lang, out, start, plain_uses):
     stream; ``lang`` is the Pygments lexer name; ``plain_uses``
     holds the stream indices of string-embedded uses; the
     rewritten lines are appended to ``out``.
+
+    A chunk containing minted's own end marker is typeset in a wrapper
+    environment instead; see ``wrapper_definition``.  Its definition is
+    emitted before the chunk, since noweb's code mode makes spaces
+    active, which would break the definition.
     """
+    <<choose the environment, defining a wrapper if the code contains minted's end marker>>
     <<split off the chunk header>>
     <<assemble body lines, relocating anchors>>
     <<choose escape delimiters>>
@@ -377,8 +383,12 @@ if CUSTOM_LEXER is None:
         options += ",escapeinside={" + delimiter + delimiter + "}"
 else:
     lexer = CUSTOM_LEXER + ":" + lexer_class(lang)
-out.append("@literal " + CATCODE_RESET + LIST_SPACING_RESET
-           + "\\begin{minted}[" + options + "]{" + lexer + "}")
+if environment != "minted":
+    begin = ("\\begin{" + environment + "}{" + options + "}{"
+             + lexer + "}")
+else:
+    begin = "\\begin{minted}[" + options + "]{" + lexer + "}"
+out.append("@literal " + CATCODE_RESET + LIST_SPACING_RESET + begin)
 out.append("@nl")
 for line in body:
     parts = []
@@ -393,10 +403,65 @@ for line in body:
             parts.append("@<<" + part[1] + "@>>")
     out.append("@literal " + "".join(parts))
     out.append("@nl")
-out.append("@literal \\end{minted}")
+out.append("@literal \\end{" + environment + "}")
 out.append("@nl")
 out.extend(relocated)
 out.extend(trailer)
+@
+
+\subsubsection{Chunks that contain minted's end marker}
+
+A chunk whose code itself produces \texttt{minted} output---this
+filter's own source is the obvious example---contains the literal
+[[\end{minted}]] (assembled from two pieces in the code below, so
+that this program's own chunk is not the first victim).  Inside a
+[[minted]] environment that line ends the environment early: the
+rest of the chunk lands outside it, and \texttt{fvextra} reports
+\enquote{Extraneous input \dots\ between [[\end{minted}]] and line
+end}.
+
+Such a chunk is typeset in a wrapper environment with another name.
+The wrapper is defined on first use, with [[\VerbatimEnvironment]]
+so that \texttt{minted} scans for the \emph{wrapper's} end marker
+instead of its own---exactly the idiom of \texttt{minted}'s
+[[\newminted]].  Three names suffice in practice: the first whose
+end marker does not itself occur in the code is used, and a chunk
+containing all three falls back to the first.  The wrapper takes the
+options and the lexer as two mandatory arguments, because a
+[[\newenvironment]] cannot forward an optional one; that is why
+[[<<emit the minted environment>>]] spells its [[\begin]] differently
+for the two cases.  The [[\ifcsname]] guard makes a second definition
+a no-op, so every such chunk may emit it, and it works the same with
+and without the bundled lexer.
+
+<<constants>>=
+MINTED_END = "\\end{" + "minted}"
+WRAPPER_NAMES = ["nwminted", "nwmintedalt", "nwmintedcode"]
+<<functions>>=
+def wrapper_definition(name):
+    """Return LaTeX defining wrapper environment ``name`` once."""
+    return ("\\ifcsname " + name + "\\endcsname\\else"
+            "\\newenvironment{" + name + "}[2]"
+            "{\\VerbatimEnvironment\\begin{minted}[#1]{#2}}"
+            "{" + MINTED_END + "}\\fi")
+@
+
+The check reads the chunk's [[@text]] lines before anything of the
+chunk is copied, so that the definition---emitted as a [[@literal]]
+line of its own---precedes the chunk's header.  It is emitted outside
+noweb's code mode for the reason given in the docstring: inside
+[[\nwbegincode]] spaces are active characters, and the definition
+would not parse.
+
+<<choose the environment, defining a wrapper if the code contains minted's end marker>>=
+code_text = "".join((parse(l)[1] or "") for l in chunk
+                    if parse(l)[0] == "text")
+environment = "minted"
+if MINTED_END in code_text:
+    environment = next((name for name in WRAPPER_NAMES
+                        if "\\end{" + name + "}" not in code_text),
+                       WRAPPER_NAMES[0])
+    out.append("@literal " + wrapper_definition(environment))
 @
 
 \subsection{Linked references inside strings: a custom lexer}
