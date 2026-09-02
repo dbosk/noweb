@@ -61,7 +61,8 @@ or a make recipe \(em which override the language otherwise inherited
 through chunk uses; chunks whose language
 remains unknown are left unannotated.
 It must run before any filter that consumes the annotations, such
-as the autodefs filters;
+as the autodefs filters or
+.BR tominted ;
 .IR noweave 's
 .B \-autolang
 option places it first in the pipeline (a plain
@@ -198,6 +199,77 @@ which uses
 .IR lynx (1)
 to convert HTML to 
 ASCII.
+.TP
+.BI tominted " mappings"
+The
+.B tominted
+filter makes
+.I noweave's
+LaTeX output typeset code chunks with the
+.B minted
+LaTeX package, so each chunk is syntax-highlighted.
+The language of a chunk is inferred from its name when the name looks
+like a filename (e.g.\&
+.B fib.py
+or
+.BR Makefile ),
+from a
+.B #!
+first line, and from the lexical context a chunk is used in (a
+here-document body, an interpreter
+.BR \-c / \-e
+argument, or a make recipe), and is inherited through chunk uses
+otherwise; chunks of unknown
+language keep the standard rendering.
+Built-in tables cover the popular languages; filenames they miss are
+matched against Pygments' own filename patterns when Pygments is
+importable where the filter runs, so any language Pygments can
+highlight is recognized.
+A chunk annotated with the
+.B @language
+keyword (see
+.B autolang
+above) uses the annotated language instead, and the annotation is
+removed from the stream.
+Chunk references inside highlighted code remain hyperlinked,
+except inside Python string literals, where a reference is shown
+as plain noweb syntax and the referenced chunk is typeset as
+plain text rather than code (suiting docstring chunks).
+It should be given as the last filter, after
+.BR \-index ;
+identifier definitions stay in the index, but identifier uses inside
+highlighted chunks are no longer hyperlinked.
+The optional
+.I mappings
+arguments extend the language tables and add rules exactly as for
+.BR autolang .
+With
+.B \-lexer
+.I path
+references are rendered through the bundled custom Pygments lexer
+(the tangled
+.BR noweb_lexer.py ,
+installed in the noweb library directory), which keeps them
+hyperlinked even inside Python strings.
+.I path
+names the lexer file relative to the directory where LaTeX runs,
+and the file must be whitelisted by SHA-256 hash under
+.B custom_lexers
+in a
+.B .latexminted_config
+file in the user's home directory; see the
+.B minted
+documentation.
+The woven document must load the
+.B minted
+package and be compiled with
+.BR "pdflatex \-shell\-escape" .
+LaTeX only; do not combine with
+.BR \-html .
+(Requires Python 3 where
+.I noweave
+runs; Pygments is needed only where the document is compiled, by
+.BR minted .)
 .TP
 .BI xchunks " files"
 The 
