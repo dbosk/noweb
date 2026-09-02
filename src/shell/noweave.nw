@@ -11,9 +11,11 @@ Here's the organization of the source:
 <<copyright notice>>
 <<initialization>>
 <<scan options and arguments>>
+<<create the status file for the pipeline stages>>
 <<emit markup on standard output>> |
                                 $backend $noindex $delay $shortxref
-exit $?
+backendstatus=$?
+<<exit with the status of the first failed stage>>
 <<if verbose, show back end>>=
 if [ -n "$verbose" ]; then echo $backend $noindex $delay $shortxref 1>&2; fi
 @
@@ -506,6 +508,8 @@ To avoid inserting any extra newlines into the output,
 I use [[@literal]]to insert headers and trailers.
 The altered [[PATH]] provides a convenience to people who want to
 use simple names to refer to filters in [[$LIB]].
+[[markup]] is stage~0 of the failure accounting described below, so
+it runs in the same braces as every filter.
 <<emit markup on standard output>>=
 (
 header=
@@ -523,9 +527,9 @@ export PATH
 <<if verbose, show back end>>
 <<build the filter pipeline from [[filters]]>>
 if [ -z "$pipeline" ]; then
-  $markup $markopts $arg
+  { $markup $markopts $arg || echo "0 $?" >>"$statusfile"; }
 else
-  $markup $markopts $arg | eval "$pipeline"
+  { $markup $markopts $arg || echo "0 $?" >>"$statusfile"; } | eval "$pipeline"
 fi
 if [ -n "$trailer" ]; then echo $trailer; fi
 )
@@ -542,18 +546,93 @@ joined string is run with a single [[eval]],
 which both interprets the [[|]] operators and re-tokenizes each
 filter's arguments---the same re-tokenization the old per-slot
 [[eval $filtera]] performed.
+
+Each stage is also wrapped so that its exit status is not lost.  A
+pipeline's status is that of its last command, so a filter that dies
+half-way---a missing interpreter, a crash---leaves a truncated
+document behind while [[noweave]] still exits~0, and a Makefile
+carries on as if the weave had succeeded.  We cannot ask the shell
+for the status of every stage (a \texttt{pipefail} option is neither
+portable nor, as explained below, quite what we want), so each stage
+records its own failure: the command runs inside braces, and if it
+exits nonzero, the stage number and the status are appended to a
+temporary file.  The command itself appears verbatim inside the
+braces, so [[eval]] tokenizes its arguments exactly as before; the
+name of the file is left for [[eval]] to expand, so that it need not
+be quoted here.
 <<build the filter pipeline from [[filters]]>>=
 pipeline=
+stage=0
 oldIFS=$IFS
 IFS=$nl
 for f in $filters; do
+  stage=`expr $stage + 1`
+  wrapped="{ $f || echo \"$stage \$?\" >>\"\$statusfile\"; }"
   if [ -z "$pipeline" ]; then
-    pipeline="$f"
+    pipeline="$wrapped"
   else
-    pipeline="$pipeline | $f"
+    pipeline="$pipeline | $wrapped"
   fi
 done
 IFS=$oldIFS
+@
+The temporary file is made by noweb's own [[nwmktemp]], as the other
+scripts do, once the options are known---so that an early exit for
+usage or [[-showautodefs]] creates nothing---and it is removed by a
+trap on exit and on the usual signals.
+<<create the status file for the pipeline stages>>=
+statusfile=$($LIB/nwmktemp) || { echo "$0: Cannot create temporary file" 1>&2; exit 1; }
+trap 'rm -f "$statusfile"' 0 1 2 15
+@
+After the back end has finished we know two things: its own status,
+and whatever the stages recorded.  Not every recorded failure is one.
+When a stage stops reading its input early---because it has failed,
+or because it legitimately ignores the rest---the stages upstream of
+it are killed by [[SIGPIPE]] the next time they write, and report
+status 141 (128 plus the signal number).  That is a consequence of
+what happened downstream, not a failure of its own, so entries with
+status 141 are skipped.  (This is why the [[pipefail]] option of
+newer shells would be the wrong tool even where it exists: it counts
+that [[SIGPIPE]] death as a failure of the whole pipeline.)  Every
+other entry is reported by stage number and command---stage~0 is
+[[markup]], stage~$n$ the $n$th filter---and the status of the
+earliest such stage, the one nearest the cause, becomes [[noweave]]'s
+own.  When nothing was recorded, the back end's status is the exit
+status, as it always was, now with a message of its own if nonzero.
+<<exit with the status of the first failed stage>>=
+failedstatus=
+if [ -s "$statusfile" ]; then
+  oldIFS=$IFS
+  IFS=$nl
+  for line in `sort -n "$statusfile"`; do
+    IFS=$oldIFS
+    set -- $line
+    stage=$1 status=$2
+    if [ "$status" -ne 141 ]; then
+      <<name the command of stage [[$stage]] in [[cmd]]>>
+      echo "$0: pipeline stage $stage ($cmd) failed with status $status" 1>&2
+      if [ -z "$failedstatus" ]; then failedstatus=$status; fi
+    fi
+    IFS=$nl
+  done
+  IFS=$oldIFS
+fi
+if [ -n "$failedstatus" ]; then exit $failedstatus; fi
+if [ $backendstatus -ne 0 ]; then
+  echo "$0: back end ($backend $noindex $delay $shortxref) failed with status $backendstatus" 1>&2
+fi
+exit $backendstatus
+@
+The stage number is turned back into the command it names by picking
+the corresponding line of [[filters]].  [[printf]] rather than
+[[echo]] copies the lines, since a filter argument may contain
+backslashes that some [[echo]]s would interpret.
+<<name the command of stage [[$stage]] in [[cmd]]>>=
+if [ "$stage" -eq 0 ]; then
+  cmd="$markup $markopts $arg"
+else
+  cmd=`printf '%s\n' "$filters" | sed -n "${stage}p"`
+fi
 <<if verbose, make noise about pipeline>>=
 if [ -n "$verbose" ]; then
   if [ -n "$header" -o -n "$trailer" ]; then

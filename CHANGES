@@ -9,6 +9,8 @@ Fixed issue #48, \nwhyperreference fatal in moving arguments under hyperref
   from TeX Live 2025 (@dbosk)
 Fixed dbosk/noweb#11, a linked identifier in a code chunk and the <...>
   following it vanished under beamerarticle (@dbosk)
+noweave now exits nonzero, naming the stage, when markup, a filter or the
+  back end fails instead of reporting only the back end's status (@dbosk)
 Various others as per git log.
 
 CHANGES FOR VERSION 2.13
