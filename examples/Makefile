@@ -25,7 +25,7 @@ www: $(HTML)
 
 clean:
 	rm -f *~ *.aux *.tex *.dvi *.log *.html *.toc *.pdf *.idx *.ilg *.ind *.out
-	rm -rf _minted fib noweb_lexer.py
+	rm -rf _minted fib multilang noweb_lexer.py
 
 clobber: clean
 
@@ -75,6 +75,25 @@ fib/Makefile: fib.nw
 fib-run: fib/fib.py fib/Makefile
 	$(MAKE) -C fib test
 	$(MAKE) -C fib run
+# multilang.nw exercises all six new -autodefs filters (cpp, rust,
+# haskell, java, sh, make) in one highlighted, indexed weave; noweave
+# stacks any number of filters.  See multilang.nw's introduction.
+multilang.tex: multilang.nw
+	$(NOWEAVE) -delay -autolang -autodefs cpp -autodefs rust -autodefs haskell -autodefs java -autodefs sh -autodefs make -index -filter 'tominted -lexer noweb_lexer.py' multilang.nw > $@
+multilang.pdf: multilang.tex noweb_lexer.py
+	mkdir -p _minted
+	pdflatex -shell-escape multilang.tex
+	pdflatex -shell-escape multilang.tex
+# Tangle every implementation into its own subdirectory (the tangled
+# Makefile would otherwise clobber this one); -t8 keeps make's tabs.
+multilang-tangle: multilang.nw
+	mkdir -p multilang
+	notangle -R'[[gcd.cpp]]'  multilang.nw > multilang/gcd.cpp
+	notangle -R'[[gcd.rs]]'   multilang.nw > multilang/gcd.rs
+	notangle -R'[[Gcd.hs]]'   multilang.nw > multilang/Gcd.hs
+	notangle -R'[[Gcd.java]]' multilang.nw > multilang/Gcd.java
+	notangle -R'[[gcd.sh]]'   multilang.nw > multilang/gcd.sh
+	notangle -t8 -R'[[Makefile]]' multilang.nw > multilang/Makefile
 mipscoder.html: mipscoder.nw
 	$(NOWEAVE) -filter l2h -index -autodefs sml -html mipscoder.nw > $@
 mipscoder.tex: mipscoder.nw
