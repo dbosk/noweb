@@ -4,6 +4,8 @@ PR 33, add Swedish
 Fixed issue #44, bad encodings for Icelandic and Swedish (@sirjofri, @jspitz)
 Fixed issue #48, \nwhyperreference fatal in moving arguments under hyperref
   from TeX Live 2025 (@dbosk)
+Fixed dbosk/noweb#11, a linked identifier in a code chunk and the <...>
+  following it vanished under beamerarticle (@dbosk)
 Various others as per git log.
 
 CHANGES FOR VERSION 2.13
