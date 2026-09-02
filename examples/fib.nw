@@ -21,23 +21,23 @@ highlighted by its own lexer.
 
 This document can be woven in three ways from the same source;
 only the filtering varies, and the examples' Makefile has a target
-for each.  The default weave highlights each chunk with minted
-([[make fib.pdf]]):
+for each.  The default weave highlights each chunk with minted and
+keeps chunk references hyperlinked even inside Python strings,
+such as the docstring reference in [[fib]] below, via the custom
+Pygments lexer that [[tominted]] uses by default
+([[make fib.pdf]]; this needs the one-time latexminted setup
+described in [[README.python]]):
 \begin{verbatim}
 noweave -delay -autolang -autodefs python3 -index \
     -filter tominted fib.nw > fib.tex
 pdflatex -shell-escape fib.tex
 \end{verbatim}
-Weaving with the bundled custom Pygments lexer additionally keeps
-chunk references hyperlinked inside Python strings, such as the
-docstring reference in [[fib]] below ([[make fib-linked.pdf]];
-this needs the one-time latexminted setup described in
-[[README.python]]):
+Adding [[-nolexer]] skips that setup; the docstring reference is
+then shown as literal noweb syntax instead of a link:
 \begin{verbatim}
 noweave -delay -autolang -autodefs python3 -index \
-    -filter 'tominted -lexer noweb_lexer.py' fib.nw \
-    > fib-linked.tex
-pdflatex -shell-escape fib-linked.tex
+    -filter 'tominted -nolexer' fib.nw > fib.tex
+pdflatex -shell-escape fib.tex
 \end{verbatim}
 Dropping the [[tominted]] filter altogether gives noweb's classic
 rendering, in which identifier uses inside code are hyperlinked
@@ -101,14 +101,13 @@ The body of the docstring lives in a chunk of its own.  Note how
 [[tominted]] handles it: the filter detects that the reference above
 sits inside the triple-quoted string, so the chunk below is typeset
 as plain text rather than Python---its prose would otherwise sprout
-spuriously highlighted keywords.  In the default weave the
-reference itself is shown as literal noweb syntax, because
-Pygments' escape mechanism cannot operate inside what it treats as
-a single string token.  Woven with
-[[-filter 'tominted -lexer noweb_lexer.py']] instead (the
-[[fib-linked.pdf]] target; see [[README.python]] for the one-time
-setup), the bundled custom lexer lifts that limitation and the
-reference above is typeset as a normal linked chunk reference.
+spuriously highlighted keywords.  The reference itself stays a
+normal linked chunk reference: Pygments' escape mechanism cannot
+operate inside what it treats as a single string token, but the
+bundled custom lexer, which [[tominted]] uses by default (see
+[[README.python]] for the one-time setup), injects links even
+there.  Woven with [[-filter 'tominted -nolexer']] instead, the
+reference above is shown as literal noweb syntax.
 
 <<[[fib]] docstring details>>=
 The sequence starts from F(0) = 0 and F(1) = 1; each later number
