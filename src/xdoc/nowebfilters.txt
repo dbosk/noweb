@@ -29,17 +29,21 @@ FFIILLTTEERRSS
               The aauuttoollaanngg filter annotates every code chunk  with  the  @@llaann‐‐
               gguuaaggee  pipeline  keyword.   The  language of a chunk is inferred
               from its name when the name looks like a filename  (e.g.  ffiibb..ppyy
-              or  MMaakkeeffiillee)  and  is  inherited  through chunk uses otherwise;
-              chunks whose language remains unknown are left unannotated.   It
-              must  run  before any filter that consumes the annotations, such
-              as the autodefs filters; _n_o_w_e_a_v_e's --aauuttoollaanngg  option  places  it
-              first in the pipeline (a plain --ffiilltteerr always runs after the au‐
-              todefs  filters).   The  optional  _m_a_p_p_i_n_g_s arguments extend the
-              built-in  language  tables,  each  of  the  form  _._e_x_t_=_l_e_x_e_r  or
-              _n_a_m_e_=_l_e_x_e_r; languages are named by their Pygments lexer aliases.
-              Running  it twice is harmless: already-annotated chunks are left
-              alone.  (Requires Python 3.  Pygments, when importable,  extends
-              the built-in filename tables but is not needed.)
+              or  MMaakkeeffiillee),  from  a  ##!!  line when the chunk's first line is
+              one, and from the lexical context a chunk is used in — the  body
+              of  a  here-document, the argument of an interpreter run with --cc
+              or --ee, or a make recipe — which override the language  otherwise
+              inherited  through chunk uses; chunks whose language remains un‐
+              known are left unannotated.  It must run before any filter  that
+              consumes   the   annotations,  such  as  the  autodefs  filters;
+              _n_o_w_e_a_v_e's --aauuttoollaanngg option places it first in  the  pipeline  (a
+              plain  --ffiilltteerr always runs after the autodefs filters).  The op‐
+              tional _m_a_p_p_i_n_g_s arguments extend the built-in  language  tables,
+              each  of  the form _._e_x_t_=_l_e_x_e_r or _n_a_m_e_=_l_e_x_e_r; languages are named
+              by their Pygments lexer aliases.  Running it twice is  harmless:
+              already-annotated  chunks  are  left alone.  (Requires Python 3.
+              Pygments, when importable, extends the built-in filename  tables
+              but is not needed.)
 
        bbttddeeffnn The  bbttddeeffnn filter uses Dave Hanson's convention to mark defini‐
               tions.  In code chunks, each defining instances of an identifier
